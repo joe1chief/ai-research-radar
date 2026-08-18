@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import sample from '../../public/data/latest.json'
 import type { PublicDataset } from '../types'
+import { publicDatasetFixture } from '../test/fixtures/public-dataset'
 import {
   DEFAULT_FILTERS,
   assertPublicDataset,
@@ -8,14 +8,15 @@ import {
   filterEvents,
   filtersFromSearch,
   filtersToSearch,
+  normalizePublicDataset,
 } from './radar'
 
-const dataset = sample as PublicDataset
+const dataset = publicDatasetFixture
 
-describe('公开归档数据', () => {
-  it('样例数据满足脱敏约束', () => {
+describe('公开数据行为', () => {
+  it('固定测试夹具满足公开数据约束', () => {
     expect(() => assertPublicDataset(dataset)).not.toThrow()
-    expect(dataset.events.length).toBeGreaterThanOrEqual(5)
+    expect(dataset.events).toHaveLength(2)
   })
 
   it('拒绝邮箱、原始正文或投递状态等私有字段', () => {
@@ -76,5 +77,33 @@ describe('公开归档数据', () => {
       dataset.generated_at,
     )
     expect(events).toHaveLength(1)
+  })
+})
+
+describe('空公开数据集', () => {
+  const emptyDataset: PublicDataset = {
+    ...dataset,
+    demo_mode: false,
+    facets: {},
+    events: [],
+  }
+
+  it('可以 normalize 且保持空事件集', () => {
+    const normalized = normalizePublicDataset(emptyDataset)
+
+    expect(normalized.events).toEqual([])
+    expect(() => assertPublicDataset(normalized)).not.toThrow()
+  })
+
+  it('可以创建搜索索引并返回空结果', () => {
+    const index = createSearchIndex(emptyDataset.events)
+
+    expect(index.search('智谱')).toEqual([])
+  })
+
+  it('可以执行筛选并返回空结果', () => {
+    expect(
+      filterEvents(emptyDataset.events, DEFAULT_FILTERS, emptyDataset.generated_at),
+    ).toEqual([])
   })
 })

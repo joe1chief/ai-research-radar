@@ -614,6 +614,11 @@ function App() {
     }
   }
 
+  const resetAllFilters = () => {
+    setFilters(DEFAULT_FILTERS)
+    setArchiveMonth('latest')
+  }
+
   if (error) {
     return (
       <main className="state-page">
@@ -628,6 +633,7 @@ function App() {
   if (!dataset) return <LoadingState />
 
   const topThree = events.slice(0, 3)
+  const isDatasetEmpty = dataset.events.length === 0
   const isFiltered = filtersToSearch(filters) !== '' || archiveMonth !== 'latest'
   const visibleSectionIds: TopicId[] = filters.topic === 'all'
     ? SECTION_IDS
@@ -699,8 +705,12 @@ function App() {
           ) : (
             <div className="empty-state empty-state--dark">
               <span aria-hidden="true">◎</span>
-              <h3>当前筛选下没有重点信号</h3>
-              <p>调整左侧条件即可恢复今日优先级。</p>
+              <h3>{isDatasetEmpty ? '等待首批公开信号' : '当前筛选下没有重点信号'}</h3>
+              <p>
+                {isDatasetEmpty
+                  ? '首次采集完成后将在这里自动展示。'
+                  : '调整左侧条件即可恢复今日优先级。'}
+              </p>
             </div>
           )}
         </section>
@@ -730,9 +740,15 @@ function App() {
             {events.length === 0 ? (
               <div className="empty-state">
                 <span aria-hidden="true">⌁</span>
-                <h3>这组条件下暂时没有信号</h3>
-                <p>可以降低最低分、扩大日期范围，或清除全文检索。</p>
-                <button type="button" onClick={() => setFilters(DEFAULT_FILTERS)}>重置全部筛选</button>
+                <h3>{isDatasetEmpty ? '等待首批公开信号' : '这组条件下暂时没有信号'}</h3>
+                <p>
+                  {isDatasetEmpty
+                    ? '首次采集完成后将在这里自动展示。'
+                    : '可以降低最低分、扩大日期范围，或清除全文检索。'}
+                </p>
+                {!isDatasetEmpty && (
+                  <button type="button" onClick={resetAllFilters}>重置全部筛选</button>
+                )}
               </div>
             ) : (
               visibleSectionIds.map((topicId) => {
