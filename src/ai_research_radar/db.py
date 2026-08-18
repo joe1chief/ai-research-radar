@@ -303,8 +303,18 @@ def create_db_engine(database_url: str, *, echo: bool = False) -> Engine:
         raw_path = database_url.removeprefix("sqlite:///")
         if raw_path not in ("", ":memory:"):
             Path(raw_path).expanduser().parent.mkdir(parents=True, exist_ok=True)
-    args = {"check_same_thread": False} if database_url.startswith("sqlite") else {}
-    engine = create_engine(database_url, echo=echo, future=True, connect_args=args)
+    is_sqlite = database_url.startswith("sqlite")
+    args = {"check_same_thread": False} if is_sqlite else {}
+    engine = create_engine(
+        database_url,
+        echo=echo,
+        future=True,
+        connect_args=args,
+        # A collection run releases its connection between sources. Validate a
+        # pooled PostgreSQL connection before the next source checks it out so
+        # a pooler-side idle disconnect is replaced before a transaction starts.
+        pool_pre_ping=not is_sqlite,
+    )
     if database_url.startswith("sqlite"):
         event.listen(engine, "connect", _enable_sqlite_foreign_keys)
     return engine

@@ -6,6 +6,7 @@ import json
 from datetime import UTC, date, datetime, timedelta
 from enum import StrEnum
 from pathlib import Path
+from typing import Any
 
 import typer
 from pydantic import ValidationError
@@ -16,11 +17,11 @@ from .alphaxiv import MCPAlphaXivAdapter, enrich_alphaxiv_top
 from .agentmail import AgentMailClient, deliver_outbox, reconcile_drafts
 from .compose import compose_delivery, ensure_operations_delivery
 from .config import load_issuers, load_sources
+from .contracts import SourceSpec
 from .db import (
     ItemModel,
     ItemVersionModel,
     RadarEventModel,
-    SourceCursorModel,
     SourceHealthModel,
     UsageLedgerModel,
     create_db_engine,
@@ -28,7 +29,6 @@ from .db import (
     session_factory,
     session_scope,
     sync_issuers,
-    sync_source,
     validate_production_schema,
 )
 from .evaluation import evaluate_topic_labels, load_topic_labels
@@ -57,6 +57,31 @@ class SourceGroup(StrEnum):
 class DeliveryKind(StrEnum):
     DIGEST = "digest"
     ALERT = "alert"
+
+
+def _backfill_cursor_payload(
+    source: SourceSpec, cursor: dict[str, Any], cutoff: datetime
+) -> dict[str, Any]:
+    """Build an in-memory replay cursor without mutating production state."""
+
+    replay = dict(cursor)
+    # Explicit None values clear persisted validators when the successful
+    # collector batch is applied; absent keys would preserve the old values.
+    replay["etag"] = None
+    replay["last_modified"] = None
+    if source.kind == "arxiv_api":
+        replay["updated_at"] = cutoff.isoformat()
+    elif source.kind == "arxiv_oai":
+        replay.update(
+            {
+                "oai_from": cutoff.date().isoformat(),
+                "set_index": 0,
+                "resumption_token": "",
+            }
+        )
+    elif source.kind == "sec_submissions":
+        replay["last_seen_native_id"] = None
+    return replay
 
 
 def _runtime() -> tuple[Settings, object]:
@@ -382,38 +407,6 @@ def backfill(days: int = typer.Option(14, min=1, max=90)) -> None:
     raw_store = _raw_store(settings)
     try:
         with session_scope(factory) as session:
-            for source in expanded:
-                sync_source(session, source)
-                cursor = session.get(SourceCursorModel, source.id)
-                if cursor is None:
-                    cursor = SourceCursorModel(source_id=source.id, cursor={})
-                    session.add(cursor)
-                    session.flush()
-                value = dict(cursor.cursor or {})
-                # A backfill is an explicit replay and must never be converted
-                # into a 304 by validators from an earlier incremental run.
-                cursor.etag = None
-                cursor.last_modified = None
-                value.pop("etag", None)
-                value.pop("last_modified", None)
-                if source.kind == "arxiv_api":
-                    value["updated_at"] = cutoff.isoformat()
-                elif source.kind == "arxiv_oai":
-                    value.update(
-                        {
-                            "oai_from": cutoff.date().isoformat(),
-                            "set_index": 0,
-                            "resumption_token": "",
-                        }
-                    )
-                elif source.kind == "sec_submissions":
-                    # A backfill intentionally replays the requested SEC date
-                    # window even when normal collection already has a newer
-                    # accession watermark. The collector immediately writes a
-                    # fresh newest-accession cursor after this run.
-                    cursor.last_seen_native_id = None
-                    value.pop("last_seen_native_id", None)
-                cursor.cursor = value
             collection = {}
             for group in SourceGroup:
                 collection[group.value] = collect_group(
@@ -425,6 +418,10 @@ def backfill(days: int = typer.Option(14, min=1, max=90)) -> None:
                     github_token=settings.github_token,
                     openreview_access_token=settings.openreview_access_token,
                     raw_store=raw_store,
+                    cursor_transform=lambda source, cursor: _backfill_cursor_payload(
+                        source, cursor, cutoff
+                    ),
+                    archive_only_cutoff=cutoff,
                 ).to_dict()
             enrichment_batches = []
             for _ in range(20):

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -36,6 +38,9 @@ from .llm import QwenClient, deterministic_embedding
 from .raw_storage import RawSnapshotStore
 from .scoring import score_event
 from .topics import RuleTopicClassifier, infer_event_type
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 CAPITAL_EVENT_TYPES = {
@@ -76,7 +81,16 @@ def collect_group(
     github_token: str | None = None,
     openreview_access_token: str | None = None,
     raw_store: RawSnapshotStore | None = None,
+    cursor_transform: Callable[[SourceSpec, dict[str, Any]], dict[str, Any]] | None = None,
+    archive_only_cutoff: datetime | None = None,
 ) -> CollectionStats:
+    """Collect one source group while keeping network waits outside DB transactions.
+
+    Each source is committed independently. This preserves healthy results when
+    another source fails and prevents a Supabase/PostgreSQL connection from
+    sitting inside a transaction during potentially long HTTP collection.
+    """
+
     stats = CollectionStats()
     for spec in sources:
         if not spec.enabled or spec.group != group:
@@ -89,10 +103,18 @@ def collect_group(
             due = due.replace(tzinfo=UTC)
         if not force and due is not None and due > now:
             stats.skipped += 1
+            session.commit()
             continue
         cursor_row = ensure_cursor(session, spec.id)
         health = ensure_source_health(session, spec.id)
         health.last_attempt_at = utcnow()
+        cursor_payload = _cursor_payload(cursor_row)
+        # Release the checked-out connection before the collector performs any
+        # external I/O. The success/failure result is persisted in a fresh,
+        # short transaction below.
+        session.commit()
+        if cursor_transform is not None:
+            cursor_payload = cursor_transform(spec, dict(cursor_payload))
         try:
             collector = collector_for(
                 spec,
@@ -106,22 +128,46 @@ def collect_group(
             )
         except UnsupportedCollectorError as exc:
             stats.skipped += 1
+            health = ensure_source_health(session, spec.id)
             health.status = "degraded"
             health.last_error = str(exc)
             health.updated_at = utcnow()
+            session.commit()
             continue
         try:
-            # A savepoint prevents one malformed source from poisoning the
-            # whole SQLAlchemy transaction and rolling back healthy sources.
+            # A single HTML/API source can spend minutes doing retries and
+            # detail requests, so collection deliberately runs without an
+            # active database transaction.
+            batch = collector.collect(cursor_payload)
+            source_discovered = 0
+            source_changed = 0
+            source_unchanged = 0
+            # A savepoint prevents one malformed item from poisoning the
+            # source transaction before its failure health is recorded.
             with session.begin_nested():
-                batch = collector.collect(_cursor_payload(cursor_row))
-                if batch.not_modified:
-                    stats.not_modified += 1
+                source_row = session.get(SourceModel, spec.id)
+                if source_row is None:
+                    raise RuntimeError(f"source disappeared during collection: {spec.id}")
+                cursor_row = ensure_cursor(session, spec.id)
+                health = ensure_source_health(session, spec.id)
                 for item in batch.items:
                     row, changed = ingest_item(session, spec, item)
-                    stats.discovered += 1
+                    source_discovered += 1
+                    item_metadata = dict(row.metadata_json or {})
+                    if archive_only_cutoff is not None and (
+                        item_metadata.get("processed_hash") != row.current_content_hash
+                    ):
+                        item_metadata["pending_archive_only"] = {
+                            "content_hash": row.current_content_hash,
+                            "source_time_cutoff": archive_only_cutoff.isoformat(),
+                        }
+                    elif changed:
+                        # A genuinely newer normal collection must not inherit
+                        # an unfinished backfill's suppression.
+                        item_metadata.pop("pending_archive_only", None)
+                    row.metadata_json = item_metadata
                     if changed:
-                        stats.changed += 1
+                        source_changed += 1
                         if raw_store is not None and item.raw_snapshot:
                             try:
                                 version = current_item_version(session, row)
@@ -137,7 +183,7 @@ def collect_group(
                                     f"private raw snapshot upload failed for {row.id}: {exc}"
                                 )
                     else:
-                        stats.unchanged += 1
+                        source_unchanged += 1
                 health_metadata = dict(health.metadata_json or {})
                 previous_empty_streak = int(health_metadata.get("empty_streak", 0))
                 if not batch.not_modified and not batch.items:
@@ -150,21 +196,41 @@ def collect_group(
                 health.metadata_json = health_metadata
                 _apply_cursor(cursor_row, batch.cursor)
                 health.status = "healthy" if not batch.warnings else "degraded"
-                stats.degraded += int(bool(batch.warnings))
                 health.last_success_at = utcnow()
                 health.consecutive_failures = 0
                 health.last_error = "; ".join(batch.warnings)[:2000] or None
                 source_row.next_due_at = utcnow() + _cadence_delta(spec.cadence)
+                health.updated_at = utcnow()
+            session.commit()
+            stats.discovered += source_discovered
+            stats.changed += source_changed
+            stats.unchanged += source_unchanged
+            stats.not_modified += int(batch.not_modified)
+            stats.degraded += int(bool(batch.warnings))
         except Exception as exc:
+            # A DBAPI disconnect invalidates the entire outer transaction even
+            # when the work used a savepoint. Roll it back fully before trying
+            # to persist source health on a replacement connection.
+            session.rollback()
+            LOGGER.warning(
+                "source collection failed: source_id=%s error_type=%s connection_invalidated=%s",
+                spec.id,
+                type(exc).__name__,
+                bool(getattr(exc, "connection_invalidated", False)),
+            )
             stats.failed += 1
+            source_row = session.get(SourceModel, spec.id)
+            if source_row is None:
+                source_row = sync_source(session, spec)
+            health = ensure_source_health(session, spec.id)
             health.status = "failing"
             health.consecutive_failures += 1
             health.last_error = str(exc)[:2000]
             source_row.next_due_at = utcnow() + timedelta(minutes=30)
+            health.updated_at = utcnow()
+            session.commit()
         finally:
             collector.close()
-            health.updated_at = utcnow()
-        session.flush()
     return stats
 
 
@@ -228,6 +294,26 @@ def verification_for(evidence_type: str) -> VerificationStatus:
     return VerificationStatus.REPORTED_UNCONFIRMED
 
 
+def _pending_archive_only(
+    metadata: dict[str, Any], current_content_hash: str
+) -> tuple[bool, datetime | None]:
+    marker = metadata.get("pending_archive_only")
+    if not isinstance(marker, dict) or marker.get("content_hash") != current_content_hash:
+        return False, None
+    value = marker.get("source_time_cutoff")
+    if not isinstance(value, str):
+        return True, None
+    try:
+        cutoff = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        # The marker still fails closed for delivery even if its optional
+        # cutoff cannot be parsed.
+        return True, None
+    if cutoff.tzinfo is None:
+        cutoff = cutoff.replace(tzinfo=UTC)
+    return True, cutoff
+
+
 def enrich_pending(
     session: Session,
     *,
@@ -266,6 +352,13 @@ def enrich_pending(
     usage_date = utcnow().astimezone(ZoneInfo(timezone)).date()
     for item in items:
         item_meta = dict(item.metadata_json or {})
+        pending_archive_only, pending_archive_cutoff = _pending_archive_only(
+            item_meta, item.current_content_hash
+        )
+        if "pending_archive_only" in item_meta and not pending_archive_only:
+            item_meta.pop("pending_archive_only", None)
+        effective_suppress_delivery = suppress_delivery or pending_archive_only
+        effective_source_time_cutoff = source_time_cutoff or pending_archive_cutoff
         if item_meta.get("processed_hash") == item.current_content_hash:
             continue
         if stats["processed"] >= limit:
@@ -277,11 +370,12 @@ def enrich_pending(
         source_timestamp = version.source_time or item.published_at
         if source_timestamp is not None and source_timestamp.tzinfo is None:
             source_timestamp = source_timestamp.replace(tzinfo=UTC)
-        if source_time_cutoff is not None and (
-            source_timestamp is None or source_timestamp < source_time_cutoff
+        if effective_source_time_cutoff is not None and (
+            source_timestamp is None or source_timestamp < effective_source_time_cutoff
         ):
             item_meta["processed_hash"] = item.current_content_hash
             item_meta["backfill_outside_window"] = True
+            item_meta.pop("pending_archive_only", None)
             item.metadata_json = item_meta
             stats["processed"] += 1
             stats["archived"] += 1
@@ -299,6 +393,7 @@ def enrich_pending(
             and not _capital_ai_relevant(f"{item.title}\n{body}")
         ):
             item_meta["processed_hash"] = item.current_content_hash
+            item_meta.pop("pending_archive_only", None)
             item.metadata_json = item_meta
             stats["processed"] += 1
             stats["archived"] += 1
@@ -306,6 +401,7 @@ def enrich_pending(
         match = classifier.classify(item.title, body, event_type=event_type)
         if not match.topics:
             item_meta["processed_hash"] = item.current_content_hash
+            item_meta.pop("pending_archive_only", None)
             item.metadata_json = item_meta
             stats["processed"] += 1
             stats["archived"] += 1
@@ -482,7 +578,7 @@ def enrich_pending(
             item_meta.get("archive_delivery_suppressed", False)
         )
         release_archive_on_material = bool(
-            not suppress_delivery and status != EventStatus.MINOR_UPDATE
+            not effective_suppress_delivery and status != EventStatus.MINOR_UPDATE
         )
         if release_archive_on_material:
             item_meta.pop("archive_delivery_suppressed", None)
@@ -496,9 +592,9 @@ def enrich_pending(
                 was_suppressed_before_embedding
                 and not (archive_marker_before and release_archive_on_material)
             )
-            if suppress_delivery:
+            if effective_suppress_delivery:
                 item_meta["archive_delivery_suppressed"] = True
-        elif suppress_delivery:
+        elif effective_suppress_delivery:
             event.delivery_suppressed = True
             item_meta["archive_delivery_suppressed"] = True
         elif status != EventStatus.MINOR_UPDATE:
@@ -594,10 +690,11 @@ def enrich_pending(
                             is_ordinary_commit=routine_record,
                         ).total,
                         now=now,
-                        suppress_delivery=suppress_delivery,
+                        suppress_delivery=effective_suppress_delivery,
                         supporting_material=status == EventStatus.MATERIAL_UPDATE,
                     )
         item_meta["processed_hash"] = item.current_content_hash
+        item_meta.pop("pending_archive_only", None)
         item.metadata_json = item_meta
         stats["processed"] += 1
         stats["published"] += int(event.is_public)
@@ -730,6 +827,7 @@ def recover_pending_embeddings(
                     supporting_verification=VerificationStatus(event.verification_status),
                     support_score=event.score,
                     now=utcnow(),
+                    suppress_delivery=archive_suppressed or previous_suppressed,
                     supporting_material=event.status == EventStatus.MATERIAL_UPDATE.value,
                 )
                 stats["merged"] += 1

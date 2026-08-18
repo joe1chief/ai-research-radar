@@ -50,9 +50,82 @@ REQUIRED_TABLES = {
     "usage_ledger",
 }
 
+STEP_ENV_CONTRACTS = {
+    "infra/scripts/validate-runtime-env.sh delivery": (
+        "RADAR_DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}",
+        "AGENTMAIL_API_KEY: ${{ secrets.AGENTMAIL_API_KEY }}",
+        "AGENTMAIL_INBOX_ID: ${{ secrets.AGENTMAIL_INBOX_ID }}",
+        "DIGEST_RECIPIENT: ${{ secrets.DIGEST_RECIPIENT }}",
+    ),
+    "uv run radar compose": (
+        "RADAR_DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}",
+        "DIGEST_RECIPIENT: ${{ secrets.DIGEST_RECIPIENT }}",
+    ),
+    "uv run radar deliver": (
+        "RADAR_DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}",
+        "AGENTMAIL_API_KEY: ${{ secrets.AGENTMAIL_API_KEY }}",
+        "AGENTMAIL_INBOX_ID: ${{ secrets.AGENTMAIL_INBOX_ID }}",
+        "DIGEST_RECIPIENT: ${{ secrets.DIGEST_RECIPIENT }}",
+    ),
+    "uv run radar reconcile": (
+        "RADAR_DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}",
+        "AGENTMAIL_API_KEY: ${{ secrets.AGENTMAIL_API_KEY }}",
+        "AGENTMAIL_INBOX_ID: ${{ secrets.AGENTMAIL_INBOX_ID }}",
+        "DIGEST_RECIPIENT: ${{ secrets.DIGEST_RECIPIENT }}",
+    ),
+}
+
 
 def fail(message: str, failures: list[str]) -> None:
     failures.append(message)
+
+
+def workflow_step_blocks(text: str) -> list[str]:
+    """Return top-level GitHub Actions step blocks without a YAML dependency."""
+
+    starts = [match.start() for match in re.finditer(r"(?m)^      - ", text)]
+    return [
+        text[start : starts[index + 1] if index + 1 < len(starts) else len(text)]
+        for index, start in enumerate(starts)
+    ]
+
+
+def workflow_step_env(block: str) -> set[str]:
+    """Extract exact mappings from a step-local env block."""
+
+    mappings: set[str] = set()
+    in_env = False
+    for line in block.splitlines():
+        if line == "        env:":
+            in_env = True
+            continue
+        if not in_env:
+            continue
+        if re.match(r"^ {10}\S", line):
+            mappings.add(line.strip())
+            continue
+        if line.startswith("          "):
+            # Nested/multiline env values are not top-level mappings.
+            continue
+        if line.strip():
+            break
+    return mappings
+
+
+def validate_step_env_contracts(filename: str, text: str, failures: list[str]) -> None:
+    for block in workflow_step_blocks(text):
+        for command, required_mappings in STEP_ENV_CONTRACTS.items():
+            if command not in block:
+                continue
+            step_name = re.search(r"(?m)^      - name:\s*(.+)$", block)
+            label = step_name.group(1).strip() if step_name else command
+            step_env = workflow_step_env(block)
+            for mapping in required_mappings:
+                if mapping not in step_env:
+                    fail(
+                        f"{filename}: step {label!r} is missing scoped env mapping {mapping}",
+                        failures,
+                    )
 
 
 def main() -> int:
@@ -202,6 +275,7 @@ def main() -> int:
 
     for path in workflows.glob("*.yml"):
         text = path.read_text(encoding="utf-8")
+        validate_step_env_contracts(path.name, text, failures)
         if path.name in PRODUCTION_WORKFLOWS and "github.event.repository.default_branch" not in text:
             fail(f"{path.name}: production job is not restricted to the default branch", failures)
         workflow_header = text.split("\njobs:", 1)[0]

@@ -78,7 +78,7 @@ def test_maintenance_exits_nonzero_for_three_consecutive_source_failures(
     assert "broken-source" in result.stdout
 
 
-def test_backfill_clears_http_validators_and_fails_on_degraded_source(
+def test_backfill_uses_ephemeral_replay_cursor_and_fails_on_degraded_source(
     tmp_path, monkeypatch
 ):
     settings, factory = _runtime(tmp_path)
@@ -106,9 +106,23 @@ def test_backfill_clears_http_validators_and_fails_on_degraded_source(
 
     def fake_collect(session, _sources, *, group, **_kwargs):
         cursor = session.get(SourceCursorModel, spec.id)
-        assert cursor.etag is None
-        assert cursor.last_modified is None
-        assert cursor.last_seen_native_id is None
+        assert cursor.etag == '"old"'
+        assert cursor.last_modified == "yesterday"
+        assert cursor.last_seen_native_id == "old-accession"
+        if group == "capital":
+            replay = _kwargs["cursor_transform"](
+                spec,
+                {
+                    **cursor.cursor,
+                    "etag": cursor.etag,
+                    "last_modified": cursor.last_modified,
+                    "last_seen_native_id": cursor.last_seen_native_id,
+                },
+            )
+            assert replay["etag"] is None
+            assert replay["last_modified"] is None
+            assert replay["last_seen_native_id"] is None
+            assert _kwargs["archive_only_cutoff"] is not None
         return CollectionStats(degraded=1 if group == "capital" else 0)
 
     monkeypatch.setattr(cli, "_runtime", lambda: (settings, factory))
@@ -122,3 +136,8 @@ def test_backfill_clears_http_validators_and_fails_on_degraded_source(
     result = CliRunner().invoke(cli.app, ["backfill", "--days", "14"])
     assert result.exit_code == 1
     assert '"degraded": 1' in result.stdout
+    with factory() as session:
+        cursor = session.get(SourceCursorModel, spec.id)
+        assert cursor.etag == '"old"'
+        assert cursor.last_modified == "yesterday"
+        assert cursor.last_seen_native_id == "old-accession"

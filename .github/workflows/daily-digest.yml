@@ -112,6 +112,7 @@ jobs:
         run: uv run radar compose --date "$(TZ=Asia/Shanghai date +%F)" --kind digest
       - name: Validate delivery environment
         env:
+          RADAR_DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
           AGENTMAIL_API_KEY: ${{ secrets.AGENTMAIL_API_KEY }}
           AGENTMAIL_INBOX_ID: ${{ secrets.AGENTMAIL_INBOX_ID }}
           DIGEST_RECIPIENT: ${{ secrets.DIGEST_RECIPIENT }}

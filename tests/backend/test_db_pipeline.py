@@ -16,8 +16,11 @@ from ai_research_radar.db import (
     RadarEventModel,
     SourceHealthModel,
     UsageLedgerModel,
+    create_db_engine,
     ingest_item,
+    init_schema,
     reserve_daily_usage,
+    session_factory,
     sync_source,
 )
 from ai_research_radar.llm import EmbeddingResult, QwenResult, deterministic_embedding
@@ -419,6 +422,100 @@ def test_embedding_recovery_does_not_unsuppress_archive_only_backfill(session):
     assert model.delivery_suppressed is True
 
 
+def test_embedding_recovery_merge_keeps_archive_only_canonical_suppressed(session):
+    classifier = RuleTopicClassifier.from_config(ROOT / "configs")
+    media = source(
+        "embedding-archive-media",
+        entity="openai",
+        evidence="reputable_media",
+    )
+    official = source("embedding-archive-official", entity="openai")
+    sync_source(session, media)
+    sync_source(session, official)
+    title = "OpenAI autonomous agent persistent memory release"
+    summary = "New autonomous agent runtime with persistent memory"
+
+    ingest_item(
+        session,
+        media,
+        CollectedItem(
+            source_id=media.id,
+            external_id="media",
+            canonical_url="https://example.com/embedding-archive/media",
+            title=title,
+            summary=summary,
+            entity_id="openai",
+            evidence_type="reputable_media",
+        ),
+    )
+    enrich_pending(
+        session,
+        classifier=classifier,
+        qwen=_EmbeddingQwen("text-embedding-v4"),
+        config_dir=ROOT / "configs",
+    )
+    canonical = session.scalar(
+        select(RadarEventModel).where(
+            RadarEventModel.primary_url == "https://example.com/embedding-archive/media"
+        )
+    )
+    assert canonical is not None
+    assert canonical.verification_status == "reported_unconfirmed"
+
+    official_item, _ = ingest_item(
+        session,
+        official,
+        CollectedItem(
+            source_id=official.id,
+            external_id="official",
+            canonical_url="https://example.com/embedding-archive/official",
+            title=title,
+            summary=summary,
+            published_at=datetime.now(UTC),
+            entity_id="openai",
+            evidence_type="official_company",
+        ),
+    )
+    official_item.metadata_json = {
+        **official_item.metadata_json,
+        "pending_archive_only": {
+            "content_hash": official_item.current_content_hash,
+            "source_time_cutoff": (datetime.now(UTC) - timedelta(days=14)).isoformat(),
+        },
+    }
+    enrich_pending(
+        session,
+        classifier=classifier,
+        qwen=_EmbeddingQwen("feature-hash-v1"),
+        config_dir=ROOT / "configs",
+    )
+    supporting = session.scalar(
+        select(RadarEventModel).where(
+            RadarEventModel.primary_url == "https://example.com/embedding-archive/official"
+        )
+    )
+    assert supporting is not None
+    assert supporting.delivery_suppressed is True
+    assert supporting.cluster_id == supporting.id
+    assert len(session.scalars(select(RadarEventModel)).all()) == 2
+
+    recovered = recover_pending_embeddings(
+        session,
+        qwen=_EmbeddingQwen("text-embedding-v4"),
+        limit=10,
+        daily_limit=10,
+    )
+
+    assert recovered["merged"] == 1
+    assert canonical.verification_status == "company_claim"
+    assert canonical.is_public is True
+    assert canonical.delivery_suppressed is True
+    assert not any(
+        event.is_public and not event.delivery_suppressed
+        for event in session.scalars(select(RadarEventModel)).all()
+    )
+
+
 def test_embedding_recovery_preserves_preexisting_non_backfill_suppression(session):
     classifier = RuleTopicClassifier.from_config(ROOT / "configs")
     spec = source("embedding-pre-suppressed", entity="openai")
@@ -617,6 +714,266 @@ def test_collection_uploads_ephemeral_raw_html_and_stores_only_private_path(
     assert store.payload == item.raw_snapshot
     assert version.raw_storage_path.endswith("content.html.gz")
     assert "private response" not in json.dumps(version.metadata_json)
+
+
+def test_collection_releases_database_transaction_before_external_io(session, monkeypatch):
+    spec = source("network-wait")
+
+    class Collector:
+        def collect(self, cursor):
+            assert cursor == {}
+            assert not session.in_transaction()
+            return CollectionBatch(cursor=cursor)
+
+        def close(self):
+            return None
+
+    monkeypatch.setattr(
+        "ai_research_radar.pipeline.collector_for",
+        lambda *args, **kwargs: Collector(),
+    )
+
+    stats = collect_group(
+        session,
+        [spec],
+        group="tech",
+        user_agent="AIResearchRadar/test",
+    )
+
+    assert stats.sources == 1
+    assert stats.degraded == 1
+
+
+def test_collection_recovers_after_invalidated_source_transaction(tmp_path, monkeypatch):
+    engine = create_db_engine(f"sqlite:///{tmp_path / 'disconnect.db'}")
+    init_schema(engine)
+    factory = session_factory(engine)
+    bad = source("disconnect-source")
+    good = source("recovered-source")
+    original_ingest = ingest_item
+
+    class Collector:
+        def __init__(self, spec):
+            self.spec = spec
+
+        def collect(self, cursor):
+            return CollectionBatch(
+                items=[
+                    CollectedItem(
+                        source_id=self.spec.id,
+                        external_id="one",
+                        canonical_url=f"https://example.com/{self.spec.id}/one",
+                        title="Autonomous agent memory",
+                        summary="multi-agent memory runtime",
+                    )
+                ],
+                cursor=cursor,
+            )
+
+        def close(self):
+            return None
+
+    monkeypatch.setattr(
+        "ai_research_radar.pipeline.collector_for",
+        lambda spec, **kwargs: Collector(spec),
+    )
+
+    def disconnect_once(active_session, spec, item):
+        if spec.id == bad.id:
+            active_session.connection().invalidate()
+            raise RuntimeError("simulated database disconnect")
+        return original_ingest(active_session, spec, item)
+
+    monkeypatch.setattr("ai_research_radar.pipeline.ingest_item", disconnect_once)
+
+    with factory() as active_session:
+        stats = collect_group(
+            active_session,
+            [bad, good],
+            group="tech",
+            user_agent="AIResearchRadar/test",
+        )
+        assert stats.failed == 1
+        assert stats.changed == 1
+        failed_health = active_session.get(SourceHealthModel, bad.id)
+        assert failed_health.status == "failing"
+        assert "simulated database disconnect" in failed_health.last_error
+        assert active_session.get(SourceHealthModel, good.id).status == "healthy"
+        assert active_session.scalar(select(func.count()).select_from(ItemModel)) == 1
+    engine.dispose()
+
+
+def test_interrupted_archive_collection_fails_closed_during_normal_enrichment(
+    tmp_path, monkeypatch
+):
+    engine = create_db_engine(f"sqlite:///{tmp_path / 'archive-recovery.db'}")
+    init_schema(engine)
+    factory = session_factory(engine)
+    spec = source("archive-recovery", entity="openai")
+    now = datetime.now(UTC)
+    cutoff = now - timedelta(days=14)
+
+    class Collector:
+        def collect(self, cursor):
+            return CollectionBatch(
+                items=[
+                    CollectedItem(
+                        source_id=spec.id,
+                        external_id="recent",
+                        canonical_url="https://example.com/archive-recovery/recent",
+                        title="OpenAI autonomous agent persistent memory release",
+                        summary="New autonomous agent runtime with persistent memory",
+                        published_at=now - timedelta(days=1),
+                        entity_id="openai",
+                        evidence_type="official_company",
+                    ),
+                    CollectedItem(
+                        source_id=spec.id,
+                        external_id="outside-window",
+                        canonical_url="https://example.com/archive-recovery/old",
+                        title="OpenAI autonomous agent persistent memory prototype",
+                        summary="An older autonomous agent runtime with persistent memory",
+                        published_at=now - timedelta(days=30),
+                        entity_id="openai",
+                        evidence_type="official_company",
+                    ),
+                ],
+                cursor=cursor,
+            )
+
+        def close(self):
+            return None
+
+    monkeypatch.setattr(
+        "ai_research_radar.pipeline.collector_for",
+        lambda *args, **kwargs: Collector(),
+    )
+
+    with factory() as collecting:
+        stats = collect_group(
+            collecting,
+            [spec],
+            group="tech",
+            user_agent="AIResearchRadar/test",
+            archive_only_cutoff=cutoff,
+        )
+        assert stats.changed == 2
+        assert all(
+            item.metadata_json["pending_archive_only"]["content_hash"]
+            == item.current_content_hash
+            for item in collecting.scalars(select(ItemModel)).all()
+        )
+
+    # Simulate the dedicated backfill process stopping before its archive-only
+    # enrichment. A later ordinary enrichment must recover the persisted intent.
+    with factory.begin() as recovering:
+        result = enrich_pending(
+            recovering,
+            classifier=RuleTopicClassifier.from_config(ROOT / "configs"),
+            config_dir=ROOT / "configs",
+        )
+        items = {
+            item.native_id: item for item in recovering.scalars(select(ItemModel)).all()
+        }
+        events = recovering.scalars(select(RadarEventModel)).all()
+        assert result["processed"] == 2
+        assert result["archived"] == 1
+        assert len(events) == 1
+        assert events[0].delivery_suppressed is True
+        assert items["recent"].metadata_json["archive_delivery_suppressed"] is True
+        assert items["outside-window"].metadata_json["backfill_outside_window"] is True
+        assert all(
+            "pending_archive_only" not in item.metadata_json for item in items.values()
+        )
+    engine.dispose()
+
+
+def test_new_normal_hash_clears_unfinished_archive_only_intent(session, monkeypatch):
+    spec = source("archive-new-hash", entity="openai")
+    original = CollectedItem(
+        source_id=spec.id,
+        external_id="release",
+        canonical_url="https://example.com/archive-new-hash/release",
+        title="OpenAI autonomous agent persistent memory release",
+        summary="New autonomous agent runtime with persistent memory",
+        published_at=datetime.now(UTC) - timedelta(days=1),
+        entity_id="openai",
+        evidence_type="official_company",
+    )
+    batches = iter(
+        [
+            CollectionBatch(items=[original]),
+            CollectionBatch(
+                items=[
+                    original.model_copy(
+                        update={
+                            "title": "OpenAI autonomous agent persistent memory v2 release",
+                            "summary": (
+                                "New experiments materially revise the autonomous agent memory result"
+                            ),
+                        }
+                    )
+                ]
+            ),
+        ]
+    )
+
+    class Collector:
+        def collect(self, _cursor):
+            return next(batches)
+
+        def close(self):
+            return None
+
+    monkeypatch.setattr(
+        "ai_research_radar.pipeline.collector_for",
+        lambda *args, **kwargs: Collector(),
+    )
+
+    collect_group(
+        session,
+        [spec],
+        group="tech",
+        user_agent="AIResearchRadar/test",
+        archive_only_cutoff=datetime.now(UTC) - timedelta(days=14),
+    )
+    pending = session.scalar(select(ItemModel))
+    assert "pending_archive_only" in pending.metadata_json
+
+    collect_group(
+        session,
+        [spec],
+        group="tech",
+        user_agent="AIResearchRadar/test",
+        force=True,
+    )
+    assert "pending_archive_only" not in pending.metadata_json
+
+    enrich_pending(
+        session,
+        classifier=RuleTopicClassifier.from_config(ROOT / "configs"),
+        config_dir=ROOT / "configs",
+    )
+    event = session.scalar(select(RadarEventModel))
+    assert event is not None
+    assert event.status == "MATERIAL_UPDATE"
+    assert event.delivery_suppressed is False
+
+
+def test_postgres_engine_pre_pings_connections(monkeypatch):
+    captured = {}
+    sentinel = object()
+
+    def fake_create_engine(database_url, **kwargs):
+        captured.update(kwargs)
+        return sentinel
+
+    monkeypatch.setattr("ai_research_radar.db.create_engine", fake_create_engine)
+
+    engine = create_db_engine("postgresql+psycopg://runtime:password@example.invalid/radar")
+
+    assert engine is sentinel
+    assert captured["pool_pre_ping"] is True
 
 
 def test_source_savepoint_keeps_healthy_results_after_database_failure(session, monkeypatch):
