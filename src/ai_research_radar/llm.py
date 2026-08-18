@@ -1,4 +1,4 @@
-"""Optional Qwen enhancement with strict JSON validation and deterministic fallback."""
+"""Provider-neutral model enhancement with validation and deterministic fallback."""
 
 from __future__ import annotations
 
@@ -8,10 +8,11 @@ import math
 import re
 from collections import Counter
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
+from urllib.parse import urlsplit
 
 import httpx
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .contracts import CollectedItem, Topic
 from .identity import normalize_content
@@ -45,28 +46,103 @@ class EmbeddingResult:
     space: str
 
 
-class QwenClient:
+@dataclass(frozen=True, slots=True)
+class ModelSmokeResult:
+    models_status: str
+    models_visible: int | None
+    classifier_model: str
+    summarizer_model: str
+    embedding_mode: str
+    embedding_checked: bool
+    embedding_dimensions: int | None
+
+
+class ModelSmokeError(RuntimeError):
+    """A deliberately redacted model probe failure safe for CI logs."""
+
+    def __init__(self, stage: str, code: str) -> None:
+        self.stage = stage
+        self.code = code
+        super().__init__(f"{stage}: {code}")
+
+
+class _SmokeChatResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    ok: bool
+    message: str
+
+
+class ModelClient:
     def __init__(
         self,
         *,
         api_key: str | None,
         base_url: str,
+        provider: Literal["dashscope", "yicloud"] = "dashscope",
         classifier_model: str = "qwen-flash",
         summarizer_model: str = "qwen-plus",
         embedding_model: str = "text-embedding-v4",
+        embedding_mode: Literal["shared", "remote", "local"] = "shared",
+        embedding_api_key: str | None = None,
+        embedding_base_url: str | None = None,
+        embedding_dimensions: int = 1024,
+        enable_thinking: bool | None = False,
+        json_response_format: bool = True,
+        max_tokens: int = 1200,
         client: httpx.Client | None = None,
     ) -> None:
         self.api_key = api_key
         self.base_url = base_url.rstrip("/")
+        self.provider = provider
         self.classifier_model = classifier_model
         self.summarizer_model = summarizer_model
         self.embedding_model = embedding_model
-        self.client = client or httpx.Client(timeout=45, follow_redirects=True)
+        self.embedding_mode = embedding_mode
+        self.embedding_dimensions = embedding_dimensions
+        self.enable_thinking = enable_thinking
+        self.json_response_format = json_response_format
+        self.max_tokens = max_tokens
+        if embedding_mode == "shared":
+            self.embedding_api_key = api_key
+            self.embedding_base_url = self.base_url
+        elif embedding_mode == "remote":
+            self.embedding_api_key = embedding_api_key
+            self.embedding_base_url = (
+                embedding_base_url.rstrip("/") if embedding_base_url else None
+            )
+        else:
+            self.embedding_api_key = None
+            self.embedding_base_url = None
+        # Never allow a redirect to carry an Authorization header to another host.
+        self.client = client or httpx.Client(timeout=45, follow_redirects=False)
         self._owns_client = client is None
 
     @property
     def enabled(self) -> bool:
         return bool(self.api_key)
+
+    @property
+    def embedding_enabled(self) -> bool:
+        return bool(
+            self.embedding_mode != "local"
+            and self.embedding_api_key
+            and self.embedding_base_url
+        )
+
+    @property
+    def remote_embedding_enabled(self) -> bool:
+        """Whether runtime should expect a remote vector and retry failures."""
+
+        return self.embedding_enabled
+
+    @property
+    def remote_embedding_space(self) -> str:
+        if self.embedding_mode == "shared":
+            namespace = self.provider
+        else:
+            namespace = urlsplit(self.embedding_base_url or "").hostname or "remote"
+        return f"{namespace}:{self.embedding_model}:{self.embedding_dimensions}"
 
     def close(self) -> None:
         if self._owns_client:
@@ -83,7 +159,7 @@ class QwenClient:
             return None
         allowed = [topic.value for topic in allowed_topics] or [topic.value for topic in Topic]
         untrusted = normalize_content(f"{item.title}\n{item.summary}\n{item.content}")[:14000]
-        payload = {
+        payload = self._chat_payload({
             "model": self.classifier_model,
             "messages": [
                 {
@@ -100,10 +176,8 @@ class QwenClient:
                     "content": f"Allowed topics: {json.dumps(allowed)}\n<UNTRUSTED_SOURCE>{untrusted}</UNTRUSTED_SOURCE>",
                 },
             ],
-            "response_format": {"type": "json_object"},
-            "enable_thinking": False,
             "temperature": 0,
-        }
+        })
         try:
             response = self._post("/chat/completions", payload)
             content = response["choices"][0]["message"]["content"]
@@ -122,7 +196,7 @@ class QwenClient:
         """Use Qwen Plus only for the capped editorial-quality card set."""
 
         locked_topics = [topic.value for topic in topics]
-        payload = {
+        payload = self._chat_payload({
             "model": self.summarizer_model,
             "messages": [
                 {
@@ -142,10 +216,8 @@ class QwenClient:
                     ),
                 },
             ],
-            "response_format": {"type": "json_object"},
-            "enable_thinking": False,
             "temperature": 0,
-        }
+        })
         try:
             response = self._post("/chat/completions", payload)
             content = response["choices"][0]["message"]["content"]
@@ -167,16 +239,23 @@ class QwenClient:
         return self.embed_with_provenance(text).vector
 
     def embed_with_provenance(self, text: str) -> EmbeddingResult:
-        if not self.enabled:
+        if not self.embedding_enabled:
             return EmbeddingResult(deterministic_embedding(text), "feature-hash-v1")
         try:
-            response = self._post(
+            response = self._post_embedding(
                 "/embeddings",
-                {"model": self.embedding_model, "input": normalize_content(text)[:8000], "dimensions": 1024},
+                {
+                    "model": self.embedding_model,
+                    "input": normalize_content(text)[:8000],
+                    "dimensions": self.embedding_dimensions,
+                },
             )
-            vector = [float(value) for value in response["data"][0]["embedding"]]
-            if len(vector) == 1024:
-                return EmbeddingResult(vector, self.embedding_model)
+            raw = response["data"][0]["embedding"]
+            if not isinstance(raw, list):
+                raise TypeError
+            vector = [float(value) for value in raw]
+            if _valid_remote_embedding(vector, self.embedding_dimensions):
+                return EmbeddingResult(vector, self.remote_embedding_space)
             return EmbeddingResult(deterministic_embedding(text), "feature-hash-v1")
         except (httpx.HTTPError, KeyError, IndexError, TypeError, ValueError):
             return EmbeddingResult(deterministic_embedding(text), "feature-hash-v1")
@@ -186,7 +265,7 @@ class QwenClient:
 
         if not self.enabled:
             return None
-        payload = {
+        payload = self._chat_payload({
             "model": self.classifier_model,
             "messages": [
                 {
@@ -205,10 +284,8 @@ class QwenClient:
                     ),
                 },
             ],
-            "response_format": {"type": "json_object"},
-            "enable_thinking": False,
             "temperature": 0,
-        }
+        })
         try:
             response = self._post("/chat/completions", payload)
             content = response["choices"][0]["message"]["content"]
@@ -216,10 +293,170 @@ class QwenClient:
         except (httpx.HTTPError, KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError):
             return None
 
+    def smoke_test(self, *, check_embedding: bool | None = None) -> ModelSmokeResult:
+        """Strictly validate the configured provider without exposing response bodies."""
+
+        if not self.enabled:
+            raise ModelSmokeError("configuration", "missing_chat_api_key")
+        self._smoke_structured_chat(self.classifier_model, "classifier_chat")
+        self._smoke_structured_chat(self.summarizer_model, "summarizer_chat")
+        models_status, models_visible = self._diagnose_models()
+        should_check_embedding = (
+            self.embedding_mode != "local"
+            if check_embedding is None
+            else check_embedding
+        )
+        dimensions = None
+        if should_check_embedding:
+            if not self.remote_embedding_enabled:
+                raise ModelSmokeError("configuration", "missing_embedding_credentials")
+            dimensions = self._smoke_embedding()
+        return ModelSmokeResult(
+            models_status=models_status,
+            models_visible=models_visible,
+            classifier_model=self.classifier_model,
+            summarizer_model=self.summarizer_model,
+            embedding_mode=self.embedding_mode,
+            embedding_checked=should_check_embedding,
+            embedding_dimensions=dimensions,
+        )
+
+    def _diagnose_models(self) -> tuple[str, int | None]:
+        try:
+            payload = self._smoke_request(
+                stage="models",
+                method="GET",
+                url=f"{self.base_url}/models",
+                api_key=self.api_key,
+            )
+        except ModelSmokeError as exc:
+            return f"unavailable_{exc.code}", None
+        rows = payload.get("data")
+        if not isinstance(rows, list):
+            return "invalid_envelope", None
+        models = {
+            row.get("id")
+            for row in rows
+            if isinstance(row, dict) and isinstance(row.get("id"), str)
+        }
+        if not models:
+            return "no_model_ids", 0
+        required = {self.classifier_model, self.summarizer_model}
+        if not required.issubset(models):
+            return "configured_models_not_listed", len(models)
+        return "ok", len(models)
+
+    def _smoke_structured_chat(self, model: str, stage: str) -> None:
+        payload = self._chat_payload(
+            {
+                "model": model,
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": (
+                            "Return exactly one JSON object with ok=true and "
+                            'message="radar-model-smoke". Do not add other keys.'
+                        ),
+                    },
+                    {"role": "user", "content": "Run the deterministic schema probe."},
+                ],
+                "temperature": 0,
+            }
+        )
+        result = self._smoke_request(
+            stage=stage,
+            method="POST",
+            url=f"{self.base_url}/chat/completions",
+            api_key=self.api_key,
+            payload=payload,
+        )
+        try:
+            content = result["choices"][0]["message"]["content"]
+            if not isinstance(content, str):
+                raise TypeError
+            parsed = _SmokeChatResponse.model_validate(_parse_json_object(content))
+        except (KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError):
+            raise ModelSmokeError(stage, "invalid_structured_response") from None
+        if not parsed.ok or parsed.message != "radar-model-smoke":
+            raise ModelSmokeError(stage, "schema_probe_mismatch")
+
+    def _smoke_embedding(self) -> int:
+        result = self._smoke_request(
+            stage="embedding",
+            method="POST",
+            url=f"{self.embedding_base_url}/embeddings",
+            api_key=self.embedding_api_key,
+            payload={
+                "model": self.embedding_model,
+                "input": "radar model smoke",
+                "dimensions": self.embedding_dimensions,
+            },
+        )
+        try:
+            raw = result["data"][0]["embedding"]
+            if not isinstance(raw, list):
+                raise TypeError
+            vector = [float(value) for value in raw]
+        except (KeyError, IndexError, TypeError, ValueError):
+            raise ModelSmokeError("embedding", "invalid_embedding_response") from None
+        if len(vector) != 1024 or self.embedding_dimensions != 1024:
+            raise ModelSmokeError("embedding", "embedding_dimensions_not_1024")
+        if not all(math.isfinite(value) for value in vector):
+            raise ModelSmokeError("embedding", "embedding_contains_non_finite_value")
+        norm = math.sqrt(sum(value * value for value in vector))
+        if not math.isfinite(norm) or norm <= 0:
+            raise ModelSmokeError("embedding", "embedding_norm_not_positive_finite")
+        return len(vector)
+
+    def _smoke_request(
+        self,
+        *,
+        stage: str,
+        method: str,
+        url: str,
+        api_key: str | None,
+        payload: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        try:
+            response = self.client.request(
+                method,
+                url,
+                headers=self._headers(api_key),
+                json=payload,
+            )
+        except httpx.RequestError:
+            raise ModelSmokeError(stage, "request_failed") from None
+        if response.history or 300 <= response.status_code < 400:
+            raise ModelSmokeError(stage, "redirect_rejected")
+        if not 200 <= response.status_code < 300:
+            raise ModelSmokeError(stage, f"http_status_{response.status_code}")
+        try:
+            result = response.json()
+        except (json.JSONDecodeError, ValueError):
+            raise ModelSmokeError(stage, "invalid_json_envelope") from None
+        if not isinstance(result, dict):
+            raise ModelSmokeError(stage, "invalid_object_envelope")
+        return result
+
+    def _chat_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
+        payload.setdefault("max_tokens", self.max_tokens)
+        if self.json_response_format:
+            payload["response_format"] = {"type": "json_object"}
+        if self.enable_thinking is not None:
+            payload["enable_thinking"] = self.enable_thinking
+        return payload
+
+    @staticmethod
+    def _headers(api_key: str | None) -> dict[str, str]:
+        return {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        }
+
     def _post(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
         response = self.client.post(
             f"{self.base_url}{path}",
-            headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
+            headers=self._headers(self.api_key),
             json=payload,
         )
         response.raise_for_status()
@@ -228,8 +465,35 @@ class QwenClient:
             raise ValueError("model response must be an object")
         return result
 
+    def _post_embedding(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
+        response = self.client.post(
+            f"{self.embedding_base_url}{path}",
+            headers=self._headers(self.embedding_api_key),
+            json=payload,
+        )
+        response.raise_for_status()
+        result = response.json()
+        if not isinstance(result, dict):
+            raise ValueError("embedding response must be an object")
+        return result
 
-def _parse_json_object(value: str) -> dict[str, Any]:
+
+# Backward-compatible import for the pipeline and third-party integrations.
+QwenClient = ModelClient
+
+
+def _valid_remote_embedding(vector: list[float], dimensions: int) -> bool:
+    if len(vector) != dimensions or dimensions != 1024:
+        return False
+    if not all(math.isfinite(value) for value in vector):
+        return False
+    norm = math.sqrt(sum(value * value for value in vector))
+    return math.isfinite(norm) and norm > 0
+
+
+def _parse_json_object(value: object) -> dict[str, Any]:
+    if not isinstance(value, str):
+        raise ValueError("expected JSON object text")
     value = value.strip()
     if value.startswith("```"):
         value = re.sub(r"^```(?:json)?\s*|\s*```$", "", value, flags=re.I)

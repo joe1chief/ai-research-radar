@@ -88,7 +88,8 @@ secrets:
 | `SUPABASE_DB_URL` | Private Postgres/pooler connection used by `radar` |
 | `SUPABASE_URL` | Server-side maintenance/Storage endpoint |
 | `SUPABASE_SECRET_KEY` | Server-side maintenance/Storage secret key |
-| `DASHSCOPE_API_KEY` | Qwen classification, summaries, and embeddings |
+| `DASHSCOPE_API_KEY` | Default DashScope chat and shared embedding provider |
+| `YICLOUD_API_KEY` | YiCloud TokenFactory chat; add only after rotating any exposed key |
 | `ALPHAXIV_ACCESS_TOKEN` | Optional alphaXiv Top-N enrichment token |
 | `OPENREVIEW_ACCESS_TOKEN` | Optional OpenReview token when guest API requests are challenged |
 | `AGENTMAIL_API_KEY` | Draft creation, sending, and reconciliation |
@@ -100,6 +101,11 @@ Add these repository variables:
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `RADAR_USER_AGENT` | required | Contact-bearing user-agent for SEC/arXiv requests |
+| `LLM_PROVIDER` | `dashscope` | `dashscope` or `yicloud`; switch to YiCloud only after its smoke test passes |
+| `YICLOUD_CLASSIFIER_MODEL` | required for YiCloud | Account-verified TokenFactory classifier model ID |
+| `YICLOUD_SUMMARIZER_MODEL` | required for YiCloud | Account-verified TokenFactory summarizer model ID |
+| `YICLOUD_JSON_RESPONSE_FORMAT` | `true` | Set `false` only if the strict prompt-only smoke test passes |
+| `LLM_MAX_TOKENS` | `1200` | Shared production and smoke response limit (`64`–`4096`) |
 | `DELIVERY_MODE` | `shadow` | Use `live` only after the three-day review |
 | `RADAR_DRY_RUN` | `true` | Set `false` together with live delivery |
 | `RADAR_PAGES_BASE_PATH` | `/<repo>/` | Set `/` for an organization/user Pages root |
@@ -109,6 +115,13 @@ Secrets are scoped to the single step that consumes them; dependency install and
 frontend build steps never receive database, mail, model, or recipient secrets.
 No command interpolates a secret into shell source. All Actions are pinned to a
 full commit SHA, and scheduled workflows run only from the default branch.
+
+Production workflows pair `LLM_PROVIDER` with a fixed host, the corresponding
+provider secret, and provider-specific model variables. YiCloud always starts
+with intentional local `feature-hash-v1` embeddings; it never receives an
+embedding request. See [the model provider runbook](../docs/model-providers.md)
+for secure key rotation, the manual billable smoke test, activation, and
+rollback commands.
 
 ## 4. Schedule and failure semantics
 

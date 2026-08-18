@@ -8,6 +8,7 @@ from enum import StrEnum
 from pathlib import Path
 
 import typer
+from pydantic import ValidationError
 from sqlalchemy import delete, func, select, text
 from zoneinfo import ZoneInfo
 
@@ -32,7 +33,7 @@ from .db import (
 )
 from .evaluation import evaluate_topic_labels, load_topic_labels
 from .exporter import export_public_dataset
-from .llm import QwenClient
+from .llm import ModelClient, ModelSmokeError
 from .pipeline import (
     collect_group,
     editorialize_top,
@@ -88,12 +89,78 @@ def _raw_store(settings: Settings) -> RawSnapshotStore | None:
     )
 
 
+def _model_client(settings: Settings, *, chat_enabled: bool = True) -> ModelClient:
+    return ModelClient(
+        api_key=settings.llm_api_key_value if chat_enabled else None,
+        base_url=settings.llm_base_url,
+        provider=settings.llm_provider,
+        classifier_model=settings.classifier_model,
+        summarizer_model=settings.summarizer_model,
+        embedding_mode=settings.embedding_mode,
+        embedding_api_key=settings.embedding_api_key_value,
+        embedding_base_url=settings.embedding_base_url,
+        embedding_model=settings.embedding_model,
+        embedding_dimensions=settings.embedding_dimensions,
+        enable_thinking=settings.effective_enable_thinking,
+        json_response_format=settings.llm_json_response_format,
+        max_tokens=settings.llm_max_tokens,
+    )
+
+
 @app.command("init-db")
 def init_db() -> None:
     """Create the portable schema (Supabase uses the checked-in SQL migration)."""
 
     settings, _ = _runtime()
     _print({"database": settings.database_url, "initialized": True})
+
+
+@app.command("model-smoke")
+def model_smoke() -> None:
+    """Strictly validate the configured model provider before production use."""
+
+    try:
+        settings = get_settings()
+    except ValidationError:
+        _print(
+            {
+                "ok": False,
+                "stage": "configuration",
+                "error": "invalid_model_configuration",
+            }
+        )
+        raise typer.Exit(code=2) from None
+    client = _model_client(settings)
+    try:
+        try:
+            result = client.smoke_test()
+        except ModelSmokeError as exc:
+            _print(
+                {
+                    "ok": False,
+                    "provider": settings.llm_provider,
+                    "stage": exc.stage,
+                    "error": exc.code,
+                }
+            )
+            raise typer.Exit(code=1) from None
+        _print(
+            {
+                "ok": True,
+                "provider": settings.llm_provider,
+                "models": result.models_status,
+                "models_visible": result.models_visible,
+                "classifier_chat": "ok",
+                "classifier_model": result.classifier_model,
+                "summarizer_chat": "ok",
+                "summarizer_model": result.summarizer_model,
+                "embedding_mode": result.embedding_mode,
+                "embedding": "ok" if result.embedding_checked else "local_intentional",
+                "embedding_dimensions": result.embedding_dimensions,
+            }
+        )
+    finally:
+        client.close()
 
 
 @app.command()
@@ -127,16 +194,10 @@ def collect(
 @app.command()
 def enrich(
     limit: int = typer.Option(300, min=1, max=1000),
-    summary_limit: int | None = typer.Option(None, min=0, max=100, help="Qwen Plus card cap"),
+    summary_limit: int | None = typer.Option(None, min=0, max=100, help="LLM card cap"),
 ) -> None:
     settings, factory = _runtime()
-    qwen = QwenClient(
-        api_key=settings.dashscope_api_key,
-        base_url=settings.dashscope_base_url,
-        classifier_model=settings.classifier_model,
-        summarizer_model=settings.summarizer_model,
-        embedding_model=settings.embedding_model,
-    )
+    qwen = _model_client(settings)
     try:
         with session_scope(factory) as session:
             resolved_summary_limit = (
@@ -182,7 +243,14 @@ def enrich(
                 timezone=settings.timezone,
                 daily_limit=settings.daily_summary_limit,
             )
-            _print({**result, "qwen_enabled": qwen.enabled})
+            _print(
+                {
+                    **result,
+                    "llm_provider": settings.llm_provider,
+                    "llm_enabled": qwen.enabled,
+                    "qwen_enabled": qwen.enabled,
+                }
+            )
     finally:
         qwen.close()
 
@@ -310,13 +378,7 @@ def backfill(days: int = typer.Option(14, min=1, max=90)) -> None:
             source = source.model_copy(update={"lookback_days": days})
         expanded.append(source)
     cutoff = datetime.now(UTC) - timedelta(days=days)
-    qwen = QwenClient(
-        api_key=settings.dashscope_api_key,
-        base_url=settings.dashscope_base_url,
-        classifier_model=settings.classifier_model,
-        summarizer_model=settings.summarizer_model,
-        embedding_model=settings.embedding_model,
-    )
+    qwen = _model_client(settings)
     raw_store = _raw_store(settings)
     try:
         with session_scope(factory) as session:
@@ -499,17 +561,12 @@ def evaluate_topics(
     """Run the fail-closed Top-1 gate over independently reviewed JSONL labels."""
 
     settings = get_settings()
-    qwen = QwenClient(
-        api_key=None if rules_only else settings.dashscope_api_key,
-        base_url=settings.dashscope_base_url,
-        classifier_model=settings.classifier_model,
-        summarizer_model=settings.summarizer_model,
-        embedding_model=settings.embedding_model,
-    )
+    qwen = _model_client(settings, chat_enabled=not rules_only)
     if not rules_only and not qwen.enabled:
         qwen.close()
         raise typer.BadParameter(
-            "DASHSCOPE_API_KEY is required; use --rules-only only for offline diagnostics"
+            "LLM_API_KEY is required; DASHSCOPE_API_KEY remains accepted for the "
+            "DashScope provider. Use --rules-only only for offline diagnostics"
         )
     try:
         result = evaluate_topic_labels(

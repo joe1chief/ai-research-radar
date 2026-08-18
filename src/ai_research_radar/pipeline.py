@@ -347,7 +347,7 @@ def enrich_pending(
             "embedding_space": embedding_space,
             "embedding_pending": bool(
                 qwen is not None
-                and qwen.enabled
+                and getattr(qwen, "remote_embedding_enabled", qwen.enabled)
                 and embedding_space == "feature-hash-v1"
             ),
         }
@@ -622,7 +622,7 @@ def recover_pending_embeddings(
         "failed": 0,
         "budget_exhausted": 0,
     }
-    if not qwen.enabled or limit <= 0:
+    if not getattr(qwen, "remote_embedding_enabled", qwen.enabled) or limit <= 0:
         return stats
     pending_marker = ItemVersionModel.metadata_json["embedding_pending"].as_boolean()
     candidates = session.scalars(
