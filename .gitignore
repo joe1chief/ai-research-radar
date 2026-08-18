@@ -18,4 +18,5 @@ web/node_modules/
 web/dist/
 web/coverage/
 .supabase/
+supabase/.temp/
 work/
