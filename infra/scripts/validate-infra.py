@@ -19,6 +19,22 @@ EXPECTED_CRONS = {
 }
 
 PRODUCTION_WORKFLOWS = {*EXPECTED_CRONS, "pages.yml"}
+MODEL_WORKFLOWS = (
+    "collect-alert.yml",
+    "paper-sweep.yml",
+    "daily-digest.yml",
+)
+MODEL_ENV_KEYS = (
+    "LLM_PROVIDER",
+    "LLM_BASE_URL",
+    "LLM_CLASSIFIER_MODEL",
+    "LLM_SUMMARIZER_MODEL",
+    "LLM_JSON_RESPONSE_FORMAT",
+    "LLM_MAX_TOKENS",
+    "LLM_EMBEDDING_MODE",
+    "LLM_EMBEDDING_MODEL",
+    "LLM_EMBEDDING_DIMENSIONS",
+)
 
 REQUIRED_TABLES = {
     "sources",
@@ -54,6 +70,119 @@ def main() -> int:
         for token in ("workflow_dispatch:", "concurrency:", "cancel-in-progress:"):
             if token not in text:
                 fail(f"{filename}: missing {token}", failures)
+
+    model_mappings: dict[str, dict[str, str]] = {}
+    for filename in MODEL_WORKFLOWS:
+        path = workflows / filename
+        if not path.is_file():
+            continue
+        text = path.read_text(encoding="utf-8")
+        header = text.split("\njobs:", 1)[0]
+        mapping: dict[str, str] = {}
+        for key in MODEL_ENV_KEYS:
+            match = re.search(rf"(?m)^  {re.escape(key)}:\s*(.+)$", header)
+            if match is None:
+                fail(f"{filename}: missing provider mapping for {key}", failures)
+            else:
+                mapping[key] = match.group(1).strip()
+        model_mappings[filename] = mapping
+
+        for token in (
+            "https://token-api.yicloud.com/v1",
+            "https://dashscope.aliyuncs.com/compatible-mode/v1",
+            "vars.YICLOUD_CLASSIFIER_MODEL",
+            "vars.YICLOUD_SUMMARIZER_MODEL",
+            "required-yicloud-classifier-model",
+            "required-yicloud-summarizer-model",
+            "if: env.LLM_PROVIDER != 'dashscope' && env.LLM_PROVIDER != 'yicloud'",
+            "if: env.LLM_PROVIDER == 'dashscope'",
+            "if: env.LLM_PROVIDER == 'yicloud'",
+            "LLM_API_KEY: ${{ secrets.DASHSCOPE_API_KEY }}",
+            "LLM_API_KEY: ${{ secrets.YICLOUD_API_KEY }}",
+            "infra/scripts/validate-runtime-env.sh",
+        ):
+            if token not in text:
+                fail(f"{filename}: missing safe provider-routing token {token}", failures)
+
+        if re.search(
+            r"secrets\.YICLOUD_API_KEY[^\n]*secrets\.DASHSCOPE_API_KEY|"
+            r"secrets\.DASHSCOPE_API_KEY[^\n]*secrets\.YICLOUD_API_KEY",
+            text,
+        ):
+            fail(
+                f"{filename}: provider secrets must never share a fallback expression",
+                failures,
+            )
+        for secret in ("DASHSCOPE_API_KEY", "YICLOUD_API_KEY"):
+            if text.count(f"LLM_API_KEY: ${{{{ secrets.{secret} }}}}") != 2:
+                fail(
+                    f"{filename}: {secret} must be scoped to its validation and model-call steps",
+                    failures,
+                )
+
+    if model_mappings:
+        reference_name = MODEL_WORKFLOWS[0]
+        reference = model_mappings.get(reference_name)
+        if reference is not None:
+            for filename, mapping in model_mappings.items():
+                if mapping != reference:
+                    fail(
+                        f"{filename}: provider mapping drifted from {reference_name}",
+                        failures,
+                    )
+
+    smoke = workflows / "model-provider-smoke.yml"
+    if not smoke.is_file():
+        fail("missing manual model-provider smoke workflow", failures)
+    else:
+        smoke_text = smoke.read_text(encoding="utf-8")
+        smoke_header = smoke_text.split("\njobs:", 1)[0]
+        for token in (
+            "workflow_dispatch:",
+            "confirm_external_call:",
+            "github.event.repository.default_branch",
+            "LLM_PROVIDER: yicloud",
+            "LLM_BASE_URL: https://token-api.yicloud.com/v1",
+            "LLM_EMBEDDING_MODE: local",
+            "json_response_format:",
+            "LLM_API_KEY: ${{ secrets.YICLOUD_API_KEY }}",
+            "infra/scripts/validate-runtime-env.sh model",
+            "uv run radar model-smoke",
+        ):
+            if token not in smoke_text:
+                fail(f"model-provider-smoke.yml: missing {token}", failures)
+        if "schedule:" in smoke_header:
+            fail("model-provider-smoke.yml: smoke must remain manual-only", failures)
+        if "secrets." in smoke_header:
+            fail("model-provider-smoke.yml: secret must be step-scoped", failures)
+        if "DASHSCOPE_API_KEY" in smoke_text:
+            fail(
+                "model-provider-smoke.yml: YiCloud smoke must not receive DashScope credentials",
+                failures,
+            )
+        if "urllib" in smoke_text or "/chat/completions" in smoke_text:
+            fail(
+                "model-provider-smoke.yml: smoke must use the production client "
+                "via radar model-smoke",
+                failures,
+            )
+
+    runtime_validator = ROOT / "infra" / "scripts" / "validate-runtime-env.sh"
+    if not runtime_validator.is_file():
+        fail("missing runtime environment validator", failures)
+    else:
+        runtime_text = runtime_validator.read_text(encoding="utf-8")
+        for token in (
+            'DASHSCOPE_HOST="https://dashscope.aliyuncs.com/compatible-mode/v1"',
+            'YICLOUD_HOST="https://token-api.yicloud.com/v1"',
+            "LLM_PROVIDER must be dashscope or yicloud",
+            "LLM_EMBEDDING_MODE must be local for yicloud",
+            "validate_boolean LLM_JSON_RESPONSE_FORMAT",
+            "DASHSCOPE_API_KEY must be unset when LLM_PROVIDER=yicloud",
+            "model)",
+        ):
+            if token not in runtime_text:
+                fail(f"validate-runtime-env.sh: missing {token}", failures)
 
     pages = workflows / "pages.yml"
     if not pages.is_file():

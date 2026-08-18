@@ -96,8 +96,9 @@ event is independently corroborated; media-only capital reports remain private
 and cannot alert. Paper PDFs and paywalled bodies are not stored.
 
 See [architecture](docs/architecture.md), [source policy](docs/source-policy.md),
-the [topic evaluation protocol](docs/topic-evaluation.md), and the
-[operations runbook](docs/runbook.md) for the full contract.
+the [topic evaluation protocol](docs/topic-evaluation.md), the
+[model provider runbook](docs/model-providers.md), and the [operations
+runbook](docs/runbook.md) for the full contract.
 
 ## Production setup
 
@@ -108,9 +109,17 @@ Actions. The exact commands and permissions are in [infra/README.md](infra/READM
 Required GitHub secrets:
 
 - `SUPABASE_DB_URL`, `SUPABASE_URL`, `SUPABASE_SECRET_KEY`;
-- `DASHSCOPE_API_KEY`;
+- `DASHSCOPE_API_KEY` for the default provider, or `YICLOUD_API_KEY` after its
+  manual smoke test succeeds;
 - optional `ALPHAXIV_ACCESS_TOKEN` and `OPENREVIEW_ACCESS_TOKEN`;
 - `AGENTMAIL_API_KEY`, `AGENTMAIL_INBOX_ID`, `DIGEST_RECIPIENT`.
+
+`LLM_PROVIDER` defaults to `dashscope`. YiCloud TokenFactory requires
+account-verified `YICLOUD_CLASSIFIER_MODEL` and `YICLOUD_SUMMARIZER_MODEL`
+repository variables; it uses the fixed TokenFactory host and intentional
+local embeddings. Do not switch the provider until the manual
+`model-provider-smoke.yml` workflow passes. Exact rotation and rollback commands
+are in the [model provider runbook](docs/model-providers.md).
 
 Keep repository variables `DELIVERY_MODE=shadow` and `RADAR_DRY_RUN=true` for
 the 14-day backfill and three review days. After verifying generated Drafts and
@@ -139,8 +148,10 @@ with `deno task check && deno task test` when Deno is installed.
 The production topic gate deliberately does not ship a synthetic green result.
 Prepare at least 100 independently reviewed JSONL rows with `id`, `title`,
 optional `text`/`event_type`, `expected_top1`, and non-empty `reviewed_by`, then
-run `radar evaluate-topics --dataset labels.jsonl` with `DASHSCOPE_API_KEY` set.
-The command evaluates the actual rules-plus-Qwen-Flash path and exits non-zero
+run `radar evaluate-topics --dataset labels.jsonl` with the selected provider's
+neutral `LLM_*` variables set. Legacy `DASHSCOPE_*` and `QWEN_*` names remain
+accepted for DashScope deployments. The command evaluates the actual
+rules-plus-model path and exits non-zero
 unless the corpus has at least 100 unique reviewed rows and Top-1 precision is
 at least 85%. `--rules-only` is an offline diagnostic and is explicitly labeled
 as such in its JSON result.

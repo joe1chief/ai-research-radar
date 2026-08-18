@@ -257,8 +257,9 @@ def test_backfill_cutoff_archives_old_or_undated_records_without_events(session)
 class _EmbeddingQwen:
     enabled = True
 
-    def __init__(self, space: str):
+    def __init__(self, space: str, *, remote_embedding_enabled: bool = True):
         self.space = space
+        self.remote_embedding_enabled = remote_embedding_enabled
 
     def enhance(self, *_args, **_kwargs):
         return None
@@ -270,6 +271,49 @@ class _EmbeddingQwen:
 
     def adjudicate_merge(self, *_args, **_kwargs):
         return None
+
+
+def test_intentional_local_embedding_is_publishable_and_never_queued_for_recovery(
+    session,
+):
+    classifier = RuleTopicClassifier.from_config(ROOT / "configs")
+    spec = source("embedding-intentional-local", entity="openai")
+    sync_source(session, spec)
+    ingest_item(
+        session,
+        spec,
+        CollectedItem(
+            source_id=spec.id,
+            external_id="local",
+            canonical_url="https://example.com/embedding-local/event",
+            title="OpenAI autonomous agent persistent memory release",
+            summary="New autonomous agent runtime with persistent memory",
+            entity_id="openai",
+            evidence_type="official_company",
+        ),
+    )
+    local = _EmbeddingQwen(
+        "feature-hash-v1",
+        remote_embedding_enabled=False,
+    )
+    result = enrich_pending(
+        session,
+        classifier=classifier,
+        qwen=local,
+        config_dir=ROOT / "configs",
+    )
+    assert result["embedding_pending"] == 0
+    event = session.scalar(select(RadarEventModel))
+    assert event is not None
+    assert event.is_public is True
+    recovered = recover_pending_embeddings(session, qwen=local, limit=10)
+    assert recovered == {
+        "attempted": 0,
+        "reembedded": 0,
+        "merged": 0,
+        "failed": 0,
+        "budget_exhausted": 0,
+    }
 
 
 def test_embedding_outage_cards_are_withheld_then_reembedded_and_reclustered(session):

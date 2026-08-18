@@ -21,12 +21,18 @@ env:
   APP_ENV: production
   APP_TIMEZONE: Asia/Shanghai
   RADAR_USER_AGENT: ${{ vars.RADAR_USER_AGENT }}
-  QWEN_CLASSIFIER_MODEL: qwen-flash
-  QWEN_SUMMARIZER_MODEL: qwen-plus
-  QWEN_EMBEDDING_MODEL: text-embedding-v4
-  QWEN_DAILY_REEMBED_LIMIT: "100"
-  QWEN_DAILY_CLASSIFY_LIMIT: "300"
-  QWEN_DAILY_SUMMARY_LIMIT: "20"
+  LLM_PROVIDER: ${{ vars.LLM_PROVIDER || 'dashscope' }}
+  LLM_BASE_URL: ${{ vars.LLM_PROVIDER == 'yicloud' && 'https://token-api.yicloud.com/v1' || 'https://dashscope.aliyuncs.com/compatible-mode/v1' }}
+  LLM_CLASSIFIER_MODEL: ${{ vars.LLM_PROVIDER == 'yicloud' && (vars.YICLOUD_CLASSIFIER_MODEL || 'required-yicloud-classifier-model') || (vars.DASHSCOPE_CLASSIFIER_MODEL || 'qwen-flash') }}
+  LLM_SUMMARIZER_MODEL: ${{ vars.LLM_PROVIDER == 'yicloud' && (vars.YICLOUD_SUMMARIZER_MODEL || 'required-yicloud-summarizer-model') || (vars.DASHSCOPE_SUMMARIZER_MODEL || 'qwen-plus') }}
+  LLM_JSON_RESPONSE_FORMAT: ${{ vars.LLM_PROVIDER == 'yicloud' && (vars.YICLOUD_JSON_RESPONSE_FORMAT || 'true') || (vars.DASHSCOPE_JSON_RESPONSE_FORMAT || 'true') }}
+  LLM_MAX_TOKENS: ${{ vars.LLM_MAX_TOKENS || '1200' }}
+  LLM_EMBEDDING_MODE: ${{ vars.LLM_PROVIDER == 'yicloud' && 'local' || 'shared' }}
+  LLM_EMBEDDING_MODEL: ${{ vars.LLM_PROVIDER == 'yicloud' && 'feature-hash-v1' || (vars.DASHSCOPE_EMBEDDING_MODEL || 'text-embedding-v4') }}
+  LLM_EMBEDDING_DIMENSIONS: "1024"
+  LLM_DAILY_REEMBED_LIMIT: "100"
+  LLM_DAILY_CLASSIFY_LIMIT: "300"
+  LLM_DAILY_SUMMARY_LIMIT: "20"
 
 jobs:
   paper-sweep:
@@ -49,10 +55,22 @@ jobs:
           else
             uv sync --all-extras
           fi
-      - name: Validate collection environment
+      - name: Reject unsupported model provider
+        if: env.LLM_PROVIDER != 'dashscope' && env.LLM_PROVIDER != 'yicloud'
+        run: infra/scripts/validate-runtime-env.sh model
+      - name: Validate DashScope collection environment
+        if: env.LLM_PROVIDER == 'dashscope'
         env:
           RADAR_DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
-          DASHSCOPE_API_KEY: ${{ secrets.DASHSCOPE_API_KEY }}
+          LLM_API_KEY: ${{ secrets.DASHSCOPE_API_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+        run: infra/scripts/validate-runtime-env.sh collect
+      - name: Validate YiCloud collection environment
+        if: env.LLM_PROVIDER == 'yicloud'
+        env:
+          RADAR_DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
+          LLM_API_KEY: ${{ secrets.YICLOUD_API_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
         run: infra/scripts/validate-runtime-env.sh collect
@@ -66,10 +84,18 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OPENREVIEW_ACCESS_TOKEN: ${{ secrets.OPENREVIEW_ACCESS_TOKEN }}
         run: uv run radar collect --group papers
-      - name: Enrich papers and alphaXiv Top-N
+      - name: Enrich papers and alphaXiv Top-N with DashScope
+        if: env.LLM_PROVIDER == 'dashscope'
         env:
           RADAR_DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
-          DASHSCOPE_API_KEY: ${{ secrets.DASHSCOPE_API_KEY }}
+          LLM_API_KEY: ${{ secrets.DASHSCOPE_API_KEY }}
+          ALPHAXIV_ACCESS_TOKEN: ${{ secrets.ALPHAXIV_ACCESS_TOKEN }}
+        run: uv run radar enrich --summary-limit 0
+      - name: Enrich papers and alphaXiv Top-N with YiCloud
+        if: env.LLM_PROVIDER == 'yicloud'
+        env:
+          RADAR_DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
+          LLM_API_KEY: ${{ secrets.YICLOUD_API_KEY }}
           ALPHAXIV_ACCESS_TOKEN: ${{ secrets.ALPHAXIV_ACCESS_TOKEN }}
         run: uv run radar enrich --summary-limit 0
       - name: Fail after preserving usable results
