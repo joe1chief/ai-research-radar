@@ -1,0 +1,70 @@
+{
+  "人工智能:1": {
+    "total": 3,
+    "pageNumber": 1,
+    "rows": [
+      {
+        "id": "2FF37940EB7FD753E06397BE0A0A413F",
+        "C_C_NAME": "<sacinfo>人工智能</sacinfo> 异构<sacinfo>人工智能</sacinfo>加速器统一接口",
+        "C_STD_CODE": "GB/T 45280-2025",
+        "STD_NATURE": "推荐性",
+        "ACT_DATE": "2025-02-28",
+        "STATE": "现行",
+        "ISSUE_DATE": "2025-02-28",
+        "PROJECT_ID": 1007208
+      },
+      {
+        "id": "511EBC5967DA9318E06397BE0A0AFBD5",
+        "C_C_NAME": "<sacinfo>人工智能</sacinfo> 可信赖 通则",
+        "C_STD_CODE": "GB/T 47507-2026",
+        "STD_NATURE": "推荐性",
+        "ACT_DATE": "2026-08-01",
+        "STATE": "即将实施",
+        "ISSUE_DATE": "2026-04-30",
+        "PROJECT_ID": 1016347
+      }
+    ]
+  },
+  "人工智能:2": {
+    "total": 3,
+    "pageNumber": 2,
+    "rows": [
+      {
+        "id": "40B74A27FD32BD79E06397BE0A0AB048",
+        "C_C_NAME": "<sacinfo>人工智能</sacinfo> 风险管理能力评估",
+        "C_STD_CODE": "GB/T 46347-2025",
+        "STD_NATURE": "推荐性",
+        "ACT_DATE": "2025-10-05",
+        "STATE": "现行",
+        "ISSUE_DATE": "2025-10-05",
+        "PROJECT_ID": 1014333
+      }
+    ]
+  },
+  "大模型:1": {
+    "total": 2,
+    "pageNumber": 1,
+    "rows": [
+      {
+        "id": "511EBC5967DA9318E06397BE0A0AFBD5",
+        "C_C_NAME": "人工智能 可信赖 通则",
+        "C_STD_CODE": "GB/T 47507-2026",
+        "STD_NATURE": "推荐性",
+        "ACT_DATE": "2026-08-01",
+        "STATE": "即将实施",
+        "ISSUE_DATE": "2026-04-30",
+        "PROJECT_ID": 1016347
+      },
+      {
+        "id": "A2345678901234567890123456789012",
+        "C_C_NAME": "人工智能 大模型服务能力评价",
+        "C_STD_CODE": "GB/T 99999-2026",
+        "STD_NATURE": "推荐性",
+        "ACT_DATE": "2027-01-01",
+        "STATE": "即将实施",
+        "ISSUE_DATE": "2026-07-01",
+        "PROJECT_ID": 1099999
+      }
+    ]
+  }
+}

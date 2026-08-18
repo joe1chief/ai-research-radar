@@ -1,0 +1,13 @@
+{
+  "imports": {
+    "@supabase/supabase-js": "jsr:@supabase/supabase-js@2.95.0",
+    "svix": "npm:svix@1.96.1"
+  },
+  "compilerOptions": {
+    "strict": true
+  },
+  "tasks": {
+    "check": "deno check index.ts logic.ts",
+    "test": "deno test logic_test.ts"
+  }
+}

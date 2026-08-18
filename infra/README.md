@@ -1,0 +1,136 @@
+# AI Research Radar infrastructure
+
+This directory documents the production boundary around the Python `radar` CLI.
+GitHub Actions performs short-lived scheduled work, Supabase is the private state
+store, AgentMail owns scheduled delivery, and GitHub Pages serves only sanitized
+static JSON.
+
+## 1. Provision Supabase
+
+1. Create a Supabase project in a region appropriate for the operator. Keep the
+   project and Storage bucket private.
+2. Link and apply the migration:
+
+   ```bash
+   supabase link --project-ref YOUR_PROJECT_REF
+   supabase db push
+   ```
+
+3. Confirm that `radar-raw` is a private bucket and that every table listed in
+   the migration has RLS enabled with no `anon` or `authenticated` policy.
+4. Production requires hosted Supabase pgvector. The migration adds
+   `embedding_vector vector(1024)` and an HNSW cosine index; startup fails closed
+   if the vector column is unavailable. SQLite remains the credential-free local path.
+5. Use the pooler transaction connection string for GitHub Actions. Percent-
+   encode special characters in the password. Never put this URL in repository
+   variables or Pages data.
+
+The server-side exporter uses an explicit ORM field allow-list and validates the
+result before writing JSON; the SQL view remains a defense-in-depth audit surface.
+Both exclude archived and unconfirmed events and omit raw text, prompts,
+recipient data, delivery state, webhook payloads, and storage paths. No browser
+receives a Supabase key.
+
+## 2. Deploy the AgentMail webhook
+
+Create an AgentMail webhook secret and store it in Supabase Functions secrets:
+
+```bash
+supabase secrets set AGENTMAIL_WEBHOOK_SECRET=whsec_REDACTED
+supabase functions deploy agentmail-webhook --no-verify-jwt
+```
+
+`SUPABASE_URL` and the hosted service-role/secret key are supplied by the Edge
+Function runtime. For local serving, set `SUPABASE_SERVICE_ROLE_KEY` explicitly.
+Register this URL with AgentMail:
+
+```text
+https://YOUR_PROJECT_REF.supabase.co/functions/v1/agentmail-webhook
+```
+
+Subscribe to `message.sent`, `message.delivered`, `message.bounced`,
+`message.rejected`, and `message.complained`. The endpoint intentionally has no
+Supabase JWT gate because AgentMail cannot provide one; it instead verifies the
+raw body and all three `svix-*` headers before touching the database. The RPC
+stores `event_id` once and applies delivery states monotonically, so webhook
+retries and out-of-order events cannot duplicate or regress a delivery.
+
+Local Edge Function checks, when Deno is installed:
+
+```bash
+cd supabase/functions/agentmail-webhook
+deno task check
+deno task test
+```
+
+## 3. Configure GitHub
+
+Configure the repository's Pages source as **GitHub Actions**. Add these Actions
+secrets:
+
+| Secret | Purpose |
+| --- | --- |
+| `SUPABASE_DB_URL` | Private Postgres/pooler connection used by `radar` |
+| `SUPABASE_URL` | Server-side maintenance/Storage endpoint |
+| `SUPABASE_SECRET_KEY` | Server-side maintenance/Storage secret key |
+| `DASHSCOPE_API_KEY` | Qwen classification, summaries, and embeddings |
+| `ALPHAXIV_ACCESS_TOKEN` | Optional alphaXiv Top-N enrichment token |
+| `OPENREVIEW_ACCESS_TOKEN` | Optional OpenReview token when guest API requests are challenged |
+| `AGENTMAIL_API_KEY` | Draft creation, sending, and reconciliation |
+| `AGENTMAIL_INBOX_ID` | The v1 `@agentmail.to` sender inbox |
+| `DIGEST_RECIPIENT` | The single private recipient address |
+
+Add these repository variables:
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `RADAR_USER_AGENT` | required | Contact-bearing user-agent for SEC/arXiv requests |
+| `DELIVERY_MODE` | `shadow` | Use `live` only after the three-day review |
+| `RADAR_DRY_RUN` | `true` | Set `false` together with live delivery |
+| `RADAR_PAGES_BASE_PATH` | `/<repo>/` | Set `/` for an organization/user Pages root |
+
+`GITHUB_TOKEN` is provided automatically with read-only contents permission.
+Secrets are scoped to the single step that consumes them; dependency install and
+frontend build steps never receive database, mail, model, or recipient secrets.
+No command interpolates a secret into shell source. All Actions are pinned to a
+full commit SHA, and scheduled workflows run only from the default branch.
+
+## 4. Schedule and failure semantics
+
+All cron expressions are UTC; product times are Asia/Shanghai:
+
+| Workflow | UTC cron | Product time |
+| --- | --- | --- |
+| Collect and Alert | `17 */4 * * *` | every 4 hours at `:17` |
+| Paper Sweep | `43 4 * * *` | 12:43 daily |
+| Daily Digest | `17 5 * * *` | 13:17; AgentMail sends at 13:45 |
+| Delivery Reconcile | `7 6 * * *` | 14:07 daily |
+| Maintenance | `27 18 * * *` | 02:27 daily |
+
+Every workflow also supports `workflow_dispatch`. Database writers share one
+concurrency group. Collection continues across source groups and composes from
+healthy results, then marks the workflow failed if any group failed. The Pages
+workflow has only the permissions needed for Pages and runs after successful
+Daily Digest or Maintenance workflows.
+
+Start in shadow mode. Inspect generated Drafts and the public archive for three
+days, then change `DELIVERY_MODE=live` and `RADAR_DRY_RUN=false`. Historical
+backfills must remain shadow-only so they never emit old alerts.
+
+## 5. Validation and operations
+
+Run the dependency-free infrastructure checks before pushing:
+
+```bash
+python3 infra/scripts/validate-infra.py
+```
+
+If a scheduled job fails, rerun it with `workflow_dispatch`; deterministic event
+revisions and delivery keys make replays safe. For a delivery timeout, run
+Delivery Reconcile before attempting another send. Do not delete an `unknown`
+delivery or create a new Draft by hand.
+
+Rotate a leaked key immediately, then rerun the affected workflow. A failed
+Svix signature returns `400`; a verified event that cannot be committed returns
+`503` so AgentMail retries it. Use `webhook_events` and `source_health` for audit
+and incident diagnosis, but never export either table.

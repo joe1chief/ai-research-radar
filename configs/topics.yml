@@ -1,0 +1,111 @@
+version: 1
+timezone: Asia/Shanghai
+topics:
+  - id: long_horizon
+    label_zh: Long Horizon Task / 长程任务
+    label_en: Long Horizon Task
+    arxiv_categories: [cs.AI, cs.MA, cs.CL, cs.SE, cs.RO, cs.LG]
+    hard_keywords:
+      - long-horizon
+      - long horizon
+      - long-running agent
+      - long-term planning
+      - long range autonomy
+      - trajectory-level
+      - hierarchical task decomposition
+    required_any: [agent, language model, llm, robot, autonomy]
+    boosters: [persistent memory, project-level, lifecycle, vulnerability discovery, drug design]
+    weak_only: [long context, context window]
+
+  - id: autonomous_agent
+    label_zh: Autonomous Agent System / 自治智能体系统
+    label_en: Autonomous Agent System
+    arxiv_categories: [cs.AI, cs.MA, cs.CL, cs.SE, cs.RO, cs.CR]
+    hard_keywords:
+      - autonomous agent
+      - agentic system
+      - multi-agent
+      - tool-using agent
+      - computer use
+      - coding agent
+      - agent orchestration
+      - agent protocol
+    boosters: [memory, continual learning, self-judge, runtime, MCP, A2A, digital employee]
+
+  - id: self_evolving
+    label_zh: Fully Self Training / Self-Evolving
+    label_en: Fully Self Training / Self-Evolving
+    arxiv_categories: [cs.LG, cs.AI, cs.CL, cs.MA]
+    hard_keywords:
+      - self-training
+      - self-improving
+      - self-play
+      - self-generated data
+      - self-rewarding
+      - automated curriculum
+      - open-ended learning
+      - on-policy distillation
+      - RLVR
+      - RLAIF
+      - recursive self-improvement
+    boosters: [synthetic data factory, AI trains AI, sandboxed self-modification]
+    weak_only: [synthetic data, pseudo-labeling]
+
+  - id: mechanistic_interpretability
+    parent: safety_governance
+    label_zh: 机械可解释性
+    label_en: Mechanistic Interpretability
+    arxiv_categories: [cs.LG, cs.AI, cs.CL]
+    hard_keywords:
+      - mechanistic interpretability
+      - circuit tracing
+      - sparse autoencoder
+      - causal tracing
+      - activation patching
+      - activation steering
+      - representation engineering
+      - model internals
+    boosters: [neuron, feature visualization, superposition]
+
+  - id: safety_governance
+    label_zh: 极致安全治理 / Safety & Governance
+    label_en: Safety & Governance
+    arxiv_categories: [cs.CR, cs.AI, cs.CY, cs.LG]
+    hard_keywords:
+      - frontier safety
+      - AI control
+      - scalable oversight
+      - alignment auditing
+      - model organism
+      - prompt injection
+      - agent security
+      - red teaming
+      - safety case
+      - model transparency
+    boosters: [superalignment, anti-abuse, emergency stop, audit log, value alignment]
+
+  - id: industrial_capital
+    label_zh: Industrial Capital / 产业资本
+    label_en: Industrial Capital
+    event_types:
+      - IPO_FILING
+      - RAISE
+      - M_AND_A
+      - CAPEX_COMPUTE
+      - MATERIAL_CONTRACT
+      - EARNINGS_GUIDANCE
+      - OWNERSHIP
+      - REGULATORY_EXPORT
+
+cross_tags:
+  - agi_to_asi
+  - scaling_agi
+  - recursive_improvement
+  - collective_intelligence
+  - open_models
+  - long_context
+  - llm_os
+  - ai_native
+  - ai_for_science
+  - cyber_security
+  - compute_infrastructure

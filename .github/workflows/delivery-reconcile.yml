@@ -1,0 +1,64 @@
+name: Delivery Reconcile
+
+on:
+  schedule:
+    # 14:07 Asia/Shanghai.
+    - cron: "7 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: radar-database-writer
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  APP_ENV: production
+  APP_TIMEZONE: Asia/Shanghai
+  RADAR_USER_AGENT: ${{ vars.RADAR_USER_AGENT }}
+  DELIVERY_MODE: ${{ vars.DELIVERY_MODE || 'shadow' }}
+  RADAR_DRY_RUN: ${{ vars.RADAR_DRY_RUN || 'true' }}
+
+jobs:
+  reconcile:
+    if: github.ref_name == github.event.repository.default_branch
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+      - name: Install backend
+        run: |
+          if [[ -f uv.lock ]]; then
+            uv sync --locked --all-extras
+          else
+            uv sync --all-extras
+          fi
+      - name: Validate database environment
+        env:
+          RADAR_DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: infra/scripts/validate-runtime-env.sh database
+      - name: Validate delivery environment
+        env:
+          AGENTMAIL_API_KEY: ${{ secrets.AGENTMAIL_API_KEY }}
+          AGENTMAIL_INBOX_ID: ${{ secrets.AGENTMAIL_INBOX_ID }}
+          DIGEST_RECIPIENT: ${{ secrets.DIGEST_RECIPIENT }}
+        run: infra/scripts/validate-runtime-env.sh delivery
+      - name: Reconcile Drafts, messages, and webhook ledger
+        env:
+          RADAR_DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
+          AGENTMAIL_API_KEY: ${{ secrets.AGENTMAIL_API_KEY }}
+          AGENTMAIL_INBOX_ID: ${{ secrets.AGENTMAIL_INBOX_ID }}
+          DIGEST_RECIPIENT: ${{ secrets.DIGEST_RECIPIENT }}
+        run: uv run radar reconcile

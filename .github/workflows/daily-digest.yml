@@ -1,0 +1,105 @@
+name: Daily Digest
+
+on:
+  schedule:
+    # 13:17 Asia/Shanghai; AgentMail schedules the draft for 13:45.
+    - cron: "17 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: radar-database-writer
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  APP_ENV: production
+  APP_TIMEZONE: Asia/Shanghai
+  RADAR_USER_AGENT: ${{ vars.RADAR_USER_AGENT }}
+  QWEN_CLASSIFIER_MODEL: qwen-flash
+  QWEN_SUMMARIZER_MODEL: qwen-plus
+  QWEN_EMBEDDING_MODEL: text-embedding-v4
+  QWEN_DAILY_CLASSIFY_LIMIT: "300"
+  QWEN_DAILY_SUMMARY_LIMIT: "20"
+  QWEN_DAILY_REEMBED_LIMIT: "100"
+  DELIVERY_MODE: ${{ vars.DELIVERY_MODE || 'shadow' }}
+  RADAR_DRY_RUN: ${{ vars.RADAR_DRY_RUN || 'true' }}
+
+jobs:
+  digest:
+    if: github.ref_name == github.event.repository.default_branch
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+      - name: Install backend
+        run: |
+          if [[ -f uv.lock ]]; then
+            uv sync --locked --all-extras
+          else
+            uv sync --all-extras
+          fi
+      - name: Validate collection environment
+        env:
+          RADAR_DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
+          DASHSCOPE_API_KEY: ${{ secrets.DASHSCOPE_API_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+        run: infra/scripts/validate-runtime-env.sh digest
+      - name: Final incremental collection
+        id: collect
+        env:
+          RADAR_DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OPENREVIEW_ACCESS_TOKEN: ${{ secrets.OPENREVIEW_ACCESS_TOKEN }}
+        run: |
+          failed=0
+          for group in papers tech capital standards; do
+            if ! uv run radar collect --group "$group"; then
+              echo "Collection group failed: $group" >&2
+              failed=1
+            fi
+          done
+          echo "failed=$failed" >> "$GITHUB_OUTPUT"
+      - name: Enrich and cluster
+        env:
+          RADAR_DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
+          DASHSCOPE_API_KEY: ${{ secrets.DASHSCOPE_API_KEY }}
+        run: uv run radar enrich
+      - name: Compose today's digest
+        env:
+          RADAR_DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
+          DIGEST_RECIPIENT: ${{ secrets.DIGEST_RECIPIENT }}
+        run: uv run radar compose --date "$(TZ=Asia/Shanghai date +%F)" --kind digest
+      - name: Validate delivery environment
+        env:
+          AGENTMAIL_API_KEY: ${{ secrets.AGENTMAIL_API_KEY }}
+          AGENTMAIL_INBOX_ID: ${{ secrets.AGENTMAIL_INBOX_ID }}
+          DIGEST_RECIPIENT: ${{ secrets.DIGEST_RECIPIENT }}
+        run: infra/scripts/validate-runtime-env.sh delivery
+      - name: Create or update the scheduled AgentMail draft
+        env:
+          RADAR_DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
+          AGENTMAIL_API_KEY: ${{ secrets.AGENTMAIL_API_KEY }}
+          AGENTMAIL_INBOX_ID: ${{ secrets.AGENTMAIL_INBOX_ID }}
+          DIGEST_RECIPIENT: ${{ secrets.DIGEST_RECIPIENT }}
+        run: uv run radar deliver
+      - name: Report partial collection failure
+        if: always() && steps.collect.outputs.failed == '1'
+        run: |
+          echo "The digest was composed from available sources; at least one source group failed." >&2
+          exit 1

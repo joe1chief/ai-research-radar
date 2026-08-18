@@ -1,0 +1,15 @@
+{
+  "source_id": "latepost-touch-high-2026-07-11",
+  "canonical_url": "https://mp.weixin.qq.com/s/3CQSkf_kBnXiCDgS4L-Cgg",
+  "published_at": "2026-07-11T19:25:00+08:00",
+  "title": "晚点独家｜唐杰内部信称将开启 Touch High（摸高）计划",
+  "content": "智谱将长期投入 Long Horizon Task，通过新记忆架构、分层任务拆解和持续执行完成周、月乃至年的任务。Autonomous Agent System 将从助手走向数字员工和多智能体社会，结合 Memory、Continual Learning、Self-Judge、RAG 与长上下文。Fully Self Training 让 AI 训练 AI，使用合成数据工厂、Self-Play、自动代码生成和安全沙盒内的递归自我改进。极致安全治理强调机械可解释性、神经元逻辑、Superalignment、Scalable Oversight、价值对齐、防滥用和全球 AI 治理。公司同时提到 GLM-5.2 能力、长期资本投入以及市场表现。",
+  "expected_topics": [
+    "long_horizon",
+    "autonomous_agent",
+    "self_evolving",
+    "mechanistic_interpretability",
+    "safety_governance"
+  ],
+  "expected_verification_status": "company_claim"
+}

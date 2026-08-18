@@ -1,0 +1,862 @@
+version: 1
+defaults:
+  timeout_seconds: 30
+  cadence: daily
+  cursor_strategy: etag_last_modified
+  detail_fetch_limit: 12
+  filing_detail_limit: 5
+sources:
+  - id: arxiv-topic-api
+    entity_id: arxiv
+    group: papers
+    kind: arxiv_api
+    url: https://export.arxiv.org/api/query
+    fetch_strategy: arxiv_query
+    cadence: daily
+    evidence_type: paper
+    cursor_strategy: updated_at_overlap
+    parser: atom
+    page_size: 100
+    max_pages: 8
+    request_interval_seconds: 3
+    enabled: true
+
+  - id: arxiv-oai-reconcile
+    entity_id: arxiv
+    group: papers
+    kind: arxiv_oai
+    url: https://oaipmh.arxiv.org/oai
+    fetch_strategy: oai_pmh_incremental
+    cadence: daily
+    evidence_type: paper
+    cursor_strategy: oai_datestamp_resumption_token
+    parser: arxiv_raw_xml
+    sets: [cs:cs:AI, cs:cs:CL, cs:cs:LG, cs:cs:MA, cs:cs:SE, cs:cs:RO, cs:cs:CR]
+    max_pages: 20
+    request_interval_seconds: 3
+    enabled: true
+
+  - id: openreview-frontier-venues
+    entity_id: openreview
+    group: papers
+    kind: openreview_api
+    url: https://api2.openreview.net/notes
+    fetch_strategy: accepted_venue_notes
+    cadence: daily
+    evidence_type: paper
+    cursor_strategy: note_revision
+    parser: openreview_json
+    venue_ids: [ICLR.cc/2026/Conference, ICML.cc/2026/Conference, NeurIPS.cc/2026/Conference]
+    page_size: 1000
+    enabled: true
+
+  - id: acl-anthology-recent
+    entity_id: acl_anthology
+    group: papers
+    kind: acl_anthology
+    url: https://aclanthology.org/
+    fetch_strategy: recent_event_pages
+    cadence: daily
+    evidence_type: paper
+    cursor_strategy: etag_last_modified
+    parser: acl_event_html
+    years_back: 1
+    event_limit: 12
+    request_interval_seconds: 0.5
+    enabled: true
+
+  - id: pmlr-recent
+    entity_id: pmlr
+    group: papers
+    kind: pmlr
+    url: https://proceedings.mlr.press/
+    fetch_strategy: recent_volume_rss
+    cadence: daily
+    evidence_type: paper
+    cursor_strategy: etag_last_modified
+    parser: rss
+    volume_limit: 6
+    request_interval_seconds: 0.5
+    enabled: true
+
+  - id: openai-news
+    entity_id: openai
+    group: tech
+    kind: rss
+    url: https://openai.com/news/rss.xml
+    fetch_strategy: rss
+    cadence: four_hour
+    evidence_type: official_company
+    parser: atom
+    max_items: 100
+    enabled: true
+  - id: deepmind-blog
+    entity_id: google_deepmind
+    group: tech
+    kind: rss
+    url: https://deepmind.google/blog/rss.xml
+    fetch_strategy: rss
+    cadence: four_hour
+    evidence_type: official_company
+    parser: rss
+    enabled: true
+  - id: microsoft-research
+    entity_id: microsoft
+    group: tech
+    kind: rss
+    url: https://www.microsoft.com/en-us/research/feed/
+    fetch_strategy: rss
+    cadence: four_hour
+    evidence_type: official_company
+    parser: rss
+    enabled: true
+  - id: anthropic-research
+    entity_id: anthropic
+    group: tech
+    kind: html
+    url: https://www.anthropic.com/research
+    fetch_strategy: html_listing
+    cadence: four_hour
+    evidence_type: official_company
+    parser: html_links
+    enabled: true
+  - id: qwen-blog
+    entity_id: alibaba_qwen
+    group: tech
+    kind: rss
+    url: https://qwenlm.github.io/blog/index.xml
+    fetch_strategy: rss
+    cadence: four_hour
+    evidence_type: official_company
+    parser: rss
+    max_items: 100
+    enabled: true
+  - id: bytedance-seed-blog
+    entity_id: bytedance_seed
+    group: tech
+    kind: html
+    url: https://seed.bytedance.com/en/blog
+    fetch_strategy: html_listing
+    cadence: four_hour
+    evidence_type: official_company
+    parser: html_links
+    enabled: true
+  - id: deepseek-news
+    entity_id: deepseek
+    group: tech
+    kind: html
+    url: https://api-docs.deepseek.com/news/
+    fetch_strategy: html_listing
+    cadence: four_hour
+    evidence_type: official_company
+    parser: html_links
+    enabled: true
+  - id: huggingface-blog
+    entity_id: huggingface
+    group: tech
+    kind: rss
+    url: https://huggingface.co/blog/feed.xml
+    fetch_strategy: rss
+    cadence: four_hour
+    evidence_type: official_company
+    parser: rss
+    max_items: 100
+    enabled: true
+  - id: zhipu-research
+    entity_id: zhipu
+    group: tech
+    kind: html
+    url: https://www.zhipuai.cn/en/research
+    fetch_strategy: html_listing
+    cadence: four_hour
+    evidence_type: official_company
+    parser: html_links
+    enabled: true
+  - id: minimax-news
+    entity_id: minimax
+    group: tech
+    kind: html
+    url: https://www.minimax.io/news
+    fetch_strategy: html_listing
+    cadence: four_hour
+    evidence_type: official_company
+    parser: html_links
+    enabled: true
+  - id: moonshot-hf
+    entity_id: moonshot
+    group: tech
+    kind: huggingface_models
+    url: https://huggingface.co/api/models?author=moonshotai&sort=lastModified&direction=-1&limit=20
+    fetch_strategy: huggingface_api
+    cadence: four_hour
+    evidence_type: official_repo
+    parser: hf_json
+    detail_fetch_limit: 3
+    enabled: true
+  - id: tencent-hunyuan-hf
+    entity_id: tencent
+    group: tech
+    kind: huggingface_models
+    url: https://huggingface.co/api/models?author=tencent&search=Hunyuan&sort=lastModified&direction=-1&limit=20
+    fetch_strategy: huggingface_api
+    cadence: four_hour
+    evidence_type: official_repo
+    parser: hf_json
+    detail_fetch_limit: 3
+    enabled: true
+  - id: baidu-ernie-releases
+    entity_id: baidu
+    group: tech
+    kind: github_releases
+    url: https://api.github.com/repos/PaddlePaddle/ERNIE/releases?per_page=10
+    fetch_strategy: github_releases
+    cadence: four_hour
+    evidence_type: official_repo
+    parser: github_json
+    enabled: true
+  - id: stepfun-hf
+    entity_id: stepfun
+    group: tech
+    kind: huggingface_models
+    url: https://huggingface.co/api/models?author=stepfun-ai&sort=lastModified&direction=-1&limit=20
+    fetch_strategy: huggingface_api
+    cadence: four_hour
+    evidence_type: official_repo
+    parser: hf_json
+    detail_fetch_limit: 3
+    enabled: true
+  - id: internlm-releases
+    entity_id: shanghai_ai_lab
+    group: tech
+    kind: github_releases
+    url: https://api.github.com/repos/InternLM/InternLM/releases?per_page=10
+    fetch_strategy: github_releases
+    cadence: four_hour
+    evidence_type: official_repo
+    parser: github_json
+    enabled: true
+  - id: meta-ai-blog
+    entity_id: meta
+    group: tech
+    kind: html
+    url: https://ai.meta.com/blog/
+    fetch_strategy: html_listing
+    cadence: four_hour
+    evidence_type: official_company
+    parser: html_links
+    enabled: true
+  - id: xai-news
+    entity_id: xai
+    group: tech
+    kind: html
+    url: https://x.ai/news
+    fetch_strategy: html_listing
+    cadence: four_hour
+    evidence_type: official_company
+    parser: html_links
+    enabled: false
+    disabled_reason: Cloudflare returns HTTP 403 to non-browser collectors; retained for manual verification.
+  - id: xai-hf
+    entity_id: xai
+    group: tech
+    kind: huggingface_models
+    url: https://huggingface.co/api/models?author=xai-org&sort=lastModified&direction=-1&limit=20
+    fetch_strategy: huggingface_api
+    cadence: four_hour
+    evidence_type: official_repo
+    parser: hf_json
+    detail_fetch_limit: 3
+    enabled: true
+  - id: mistral-news
+    entity_id: mistral
+    group: tech
+    kind: html
+    url: https://mistral.ai/news
+    fetch_strategy: html_listing
+    cadence: four_hour
+    evidence_type: official_company
+    parser: html_links
+    enabled: true
+  - id: cohere-research
+    entity_id: cohere
+    group: tech
+    kind: html
+    url: https://cohere.com/research
+    fetch_strategy: html_listing
+    cadence: four_hour
+    evidence_type: official_company
+    parser: html_links
+    enabled: true
+  - id: amazon-science-news
+    entity_id: amazon
+    group: tech
+    kind: html
+    url: https://www.amazon.science/news
+    fetch_strategy: html_listing
+    cadence: four_hour
+    evidence_type: official_company
+    parser: html_links
+    enabled: true
+  - id: nvidia-research
+    entity_id: nvidia
+    group: tech
+    kind: html
+    url: https://research.nvidia.com/
+    fetch_strategy: html_listing
+    cadence: four_hour
+    evidence_type: official_company
+    parser: html_links
+    enabled: true
+
+  - id: apple-ml-research
+    entity_id: apple
+    group: tech
+    kind: html
+    url: https://machinelearning.apple.com/
+    fetch_strategy: html_listing
+    cadence: daily
+    evidence_type: official_company
+    parser: html_links
+    enabled: true
+  - id: prime-intellect-blog
+    entity_id: prime_intellect
+    group: tech
+    kind: html
+    url: https://www.primeintellect.ai/blog
+    fetch_strategy: html_listing
+    cadence: daily
+    evidence_type: official_company
+    parser: html_links
+    enabled: true
+  - id: together-blog
+    entity_id: together_ai
+    group: tech
+    kind: html
+    url: https://www.together.ai/blog
+    fetch_strategy: html_listing
+    cadence: daily
+    evidence_type: official_company
+    parser: html_links
+    enabled: true
+  - id: scale-research
+    entity_id: scale_ai
+    group: tech
+    kind: html
+    url: https://scale.com/research
+    fetch_strategy: html_listing
+    cadence: daily
+    evidence_type: official_company
+    parser: html_links
+    enabled: true
+  - id: sensetime-news
+    entity_id: sensetime
+    group: tech
+    kind: html
+    url: https://www.sensetime.com/en/news/
+    fetch_strategy: html_listing
+    cadence: daily
+    evidence_type: official_company
+    parser: html_links
+    include_url_patterns: ['/en/news/\d+$']
+    exclude_title_patterns: ['^View Details$']
+    max_items: 120
+    enabled: true
+  - id: one-ai-news
+    entity_id: one_ai
+    group: tech
+    kind: html
+    url: https://www.lingyiwanwu.com/news
+    fetch_strategy: html_listing
+    cadence: daily
+    evidence_type: official_company
+    parser: html_links
+    enabled: true
+  - id: shanghai-ai-lab-news
+    entity_id: shanghai_ai_lab
+    group: tech
+    kind: html
+    url: https://www.shlab.org.cn/
+    fetch_strategy: html_listing
+    cadence: daily
+    evidence_type: official_company
+    parser: html_links
+    enabled: true
+  - id: iflytek-skillhub-releases
+    entity_id: iflytek
+    group: tech
+    kind: github_releases
+    url: https://api.github.com/repos/iflytek/skillhub/releases?per_page=10
+    fetch_strategy: github_releases
+    cadence: daily
+    evidence_type: official_repo
+    parser: github_json
+    enabled: true
+  - id: iflytek-hf
+    entity_id: iflytek
+    group: tech
+    kind: huggingface_models
+    url: https://huggingface.co/api/models?author=iFlytekOpenSource&sort=lastModified&direction=-1&limit=20
+    fetch_strategy: huggingface_api
+    cadence: daily
+    evidence_type: official_repo
+    parser: hf_json
+    enabled: true
+
+  - &github_release
+    id: mcp-releases
+    entity_id: mcp
+    group: standards
+    kind: github_releases
+    url: https://api.github.com/repos/modelcontextprotocol/modelcontextprotocol/releases?per_page=10
+    fetch_strategy: github_releases
+    cadence: four_hour
+    evidence_type: official_repo
+    parser: github_json
+    enabled: true
+  - <<: *github_release
+    id: a2a-releases
+    entity_id: a2a
+    url: https://api.github.com/repos/a2aproject/A2A/releases?per_page=10
+  - <<: *github_release
+    id: openai-agents-sdk-releases
+    entity_id: openai_agents_sdk
+    group: tech
+    url: https://api.github.com/repos/openai/openai-agents-python/releases?per_page=10
+  - <<: *github_release
+    id: google-adk-releases
+    entity_id: google_adk
+    group: tech
+    url: https://api.github.com/repos/google/adk-python/releases?per_page=10
+  - <<: *github_release
+    id: microsoft-agent-framework-releases
+    entity_id: microsoft_agent_framework
+    group: tech
+    url: https://api.github.com/repos/microsoft/agent-framework/releases?per_page=10
+  - <<: *github_release
+    id: terminal-bench-releases
+    entity_id: terminal_bench
+    group: tech
+    url: https://api.github.com/repos/laude-institute/terminal-bench/releases?per_page=10
+  - <<: *github_release
+    id: open-r1-releases
+    entity_id: open_r1
+    group: tech
+    url: https://api.github.com/repos/huggingface/open-r1/releases?per_page=10
+  - <<: *github_release
+    id: verl-releases
+    entity_id: verl
+    group: tech
+    url: https://api.github.com/repos/verl-project/verl/releases?per_page=10
+  - <<: *github_release
+    id: inspect-ai-releases
+    entity_id: uk_aisi
+    group: standards
+    url: https://api.github.com/repos/UKGovernmentBEIS/inspect_ai/releases?per_page=10
+  - <<: *github_release
+    id: transformer-lens-releases
+    entity_id: transformer_lens
+    group: tech
+    url: https://api.github.com/repos/TransformerLensOrg/TransformerLens/releases?per_page=10
+  - <<: *github_release
+    id: sae-lens-releases
+    entity_id: sae_lens
+    group: tech
+    url: https://api.github.com/repos/decoderesearch/SAELens/releases?per_page=10
+  - <<: *github_release
+    id: opentelemetry-spec-releases
+    entity_id: opentelemetry
+    group: standards
+    url: https://api.github.com/repos/open-telemetry/opentelemetry-specification/releases?per_page=10
+  - <<: *github_release
+    id: swe-bench-releases
+    entity_id: swe_bench
+    group: tech
+    url: https://api.github.com/repos/SWE-bench/SWE-bench/releases?per_page=10
+  - <<: *github_release
+    id: osworld-releases
+    entity_id: osworld
+    group: tech
+    url: https://api.github.com/repos/xlang-ai/OSWorld/releases?per_page=10
+  - <<: *github_release
+    id: webarena-releases
+    entity_id: webarena
+    group: tech
+    url: https://api.github.com/repos/web-arena-x/webarena/releases?per_page=10
+  - <<: *github_release
+    id: trl-releases
+    entity_id: trl
+    group: tech
+    url: https://api.github.com/repos/huggingface/trl/releases?per_page=10
+  - <<: *github_release
+    id: openrlhf-releases
+    entity_id: openrlhf
+    group: tech
+    url: https://api.github.com/repos/OpenRLHF/OpenRLHF/releases?per_page=10
+  - <<: *github_release
+    id: slime-releases
+    entity_id: slime
+    group: tech
+    url: https://api.github.com/repos/THUDM/slime/releases?per_page=10
+
+  - id: gaia-benchmark-dataset
+    entity_id: gaia
+    group: tech
+    kind: huggingface_models
+    url: https://huggingface.co/api/datasets?author=gaia-benchmark&sort=lastModified&direction=-1&limit=20
+    fetch_strategy: huggingface_api
+    cadence: daily
+    evidence_type: official_repo
+    parser: hf_json
+    repo_type: dataset
+    enabled: true
+
+  - id: sec-alphabet
+    entity_id: alphabet
+    group: capital
+    kind: sec_submissions
+    url: https://data.sec.gov/submissions/CIK0001652044.json
+    fetch_strategy: sec_submissions
+    cadence: four_hour
+    evidence_type: regulatory_filing
+    cursor_strategy: accession_number
+    parser: sec_json
+    lookback_days: 45
+    enabled: true
+  - id: sec-microsoft
+    entity_id: microsoft
+    group: capital
+    kind: sec_submissions
+    url: https://data.sec.gov/submissions/CIK0000789019.json
+    fetch_strategy: sec_submissions
+    cadence: four_hour
+    evidence_type: regulatory_filing
+    cursor_strategy: accession_number
+    parser: sec_json
+    lookback_days: 45
+    enabled: true
+  - id: sec-meta
+    entity_id: meta
+    group: capital
+    kind: sec_submissions
+    url: https://data.sec.gov/submissions/CIK0001326801.json
+    fetch_strategy: sec_submissions
+    cadence: four_hour
+    evidence_type: regulatory_filing
+    cursor_strategy: accession_number
+    parser: sec_json
+    lookback_days: 45
+    enabled: true
+  - id: sec-amazon
+    entity_id: amazon
+    group: capital
+    kind: sec_submissions
+    url: https://data.sec.gov/submissions/CIK0001018724.json
+    fetch_strategy: sec_submissions
+    cadence: four_hour
+    evidence_type: regulatory_filing
+    cursor_strategy: accession_number
+    parser: sec_json
+    lookback_days: 45
+    enabled: true
+  - id: sec-nvidia
+    entity_id: nvidia
+    group: capital
+    kind: sec_submissions
+    url: https://data.sec.gov/submissions/CIK0001045810.json
+    fetch_strategy: sec_submissions
+    cadence: four_hour
+    evidence_type: regulatory_filing
+    cursor_strategy: accession_number
+    parser: sec_json
+    lookback_days: 45
+    enabled: true
+  - id: sec-amd
+    entity_id: amd
+    group: capital
+    kind: sec_submissions
+    url: https://data.sec.gov/submissions/CIK0000002488.json
+    fetch_strategy: sec_submissions
+    cadence: four_hour
+    evidence_type: regulatory_filing
+    cursor_strategy: accession_number
+    parser: sec_json
+    lookback_days: 45
+    enabled: true
+  - id: sec-oracle
+    entity_id: oracle
+    group: capital
+    kind: sec_submissions
+    url: https://data.sec.gov/submissions/CIK0001341439.json
+    fetch_strategy: sec_submissions
+    cadence: four_hour
+    evidence_type: regulatory_filing
+    cursor_strategy: accession_number
+    parser: sec_json
+    lookback_days: 45
+    enabled: true
+  - id: sec-coreweave
+    entity_id: coreweave
+    group: capital
+    kind: sec_submissions
+    url: https://data.sec.gov/submissions/CIK0001769628.json
+    fetch_strategy: sec_submissions
+    cadence: four_hour
+    evidence_type: regulatory_filing
+    cursor_strategy: accession_number
+    parser: sec_json
+    lookback_days: 45
+    enabled: true
+  - id: sec-alibaba
+    entity_id: alibaba
+    group: capital
+    kind: sec_submissions
+    url: https://data.sec.gov/submissions/CIK0001577552.json
+    fetch_strategy: sec_submissions
+    cadence: four_hour
+    evidence_type: regulatory_filing
+    cursor_strategy: accession_number
+    parser: sec_json
+    lookback_days: 45
+    enabled: true
+  - id: sec-baidu
+    entity_id: baidu
+    group: capital
+    kind: sec_submissions
+    url: https://data.sec.gov/submissions/CIK0001329099.json
+    fetch_strategy: sec_submissions
+    cadence: four_hour
+    evidence_type: regulatory_filing
+    cursor_strategy: accession_number
+    parser: sec_json
+    lookback_days: 45
+    enabled: true
+  - id: alibaba-ir
+    entity_id: alibaba
+    group: capital
+    kind: html
+    url: https://home.alibabagroup.com/en-US/ir-news-filings
+    fetch_strategy: html_listing
+    cadence: four_hour
+    evidence_type: official_company
+    parser: html_links
+    include_url_patterns: ['/en-US/document-']
+    detail_fetch_limit: 0
+    max_items: 80
+    enabled: true
+  - id: tencent-announcements
+    entity_id: tencent
+    group: capital
+    kind: html
+    url: https://www.tencent.com/zh-hk/investors/announcements.html
+    fetch_strategy: html_listing
+    cadence: four_hour
+    evidence_type: exchange_filing
+    parser: html_links
+    include_url_patterns: ['\.pdf(?:$|\?)']
+    routine_title_patterns:
+      - '翌日披露報表|翌日披露报表|月報表|月报表|股份購回|股份购回|證券變動|证券变动'
+      - '董事會會議|董事会会议|代表委任|投票表決|投票表决|授出獎勵|授出奖励|購股權|购股权'
+    max_items: 120
+    detail_fetch_limit: 0
+    enabled: true
+  - id: sse-cambricon
+    entity_id: cambricon
+    group: capital
+    kind: sse_announcements
+    url: https://query.sse.com.cn/security/stock/queryCompanyBulletin.do
+    fetch_strategy: sse_company_bulletins
+    cadence: four_hour
+    evidence_type: exchange_filing
+    cursor_strategy: date_window_document_id
+    parser: sse_json
+    product_id: '688256'
+    lookback_days: 45
+    page_size: 50
+    max_pages: 5
+    routine_title_patterns:
+      - '关于召开.*股东大会|股东大会会议资料'
+      - '独立董事.*述职报告|社会责任报告|内部控制评价报告'
+    allow_empty: true
+    enabled: true
+  - id: hkex-minimax
+    entity_id: minimax
+    group: capital
+    kind: html
+    url: https://www1.hkexnews.hk/search/titlesearch.xhtml?category=0&lang=EN&market=SEHK&stockId=1000286746
+    fetch_strategy: html_listing
+    cadence: four_hour
+    evidence_type: exchange_filing
+    parser: html_links
+    include_url_patterns: ['/listedco/listconews/.+\.pdf(?:$|\?)']
+    routine_title_patterns:
+      - 'Monthly Return|Next Day Disclosure Return|Board Meeting|Proxy Form'
+      - '月報表|月报表|翌日披露報表|翌日披露报表|董事會會議|董事会会议'
+    max_items: 80
+    detail_fetch_limit: 0
+    enabled: true
+  - id: hkex-zhipu
+    entity_id: zhipu
+    group: capital
+    kind: html
+    url: https://www1.hkexnews.hk/search/titlesearch.xhtml?category=0&lang=EN&market=SEHK&stockId=1000286748
+    fetch_strategy: html_listing
+    cadence: four_hour
+    evidence_type: exchange_filing
+    parser: html_links
+    include_url_patterns: ['/listedco/listconews/.+\.pdf(?:$|\?)']
+    max_items: 80
+    detail_fetch_limit: 0
+    enabled: true
+  - id: cninfo-iflytek
+    entity_id: iflytek
+    group: capital
+    kind: cninfo_announcements
+    url: https://www.cninfo.com.cn/new/hisAnnouncement/query
+    fetch_strategy: cninfo_official_api
+    cadence: four_hour
+    evidence_type: exchange_filing
+    cursor_strategy: announcement_time_overlap
+    parser: cninfo_json
+    stock: 002230,9900004565
+    ticker: '002230'
+    org_id: '9900004565'
+    column: szse
+    plate: sz
+    referer: https://www.cninfo.com.cn/new/disclosure/stock?orgId=9900004565&stockCode=002230
+    lookback_days: 45
+    overlap_days: 7
+    page_size: 30
+    max_pages: 4
+    allow_empty: true
+    routine_title_patterns:
+      - '权益分派|股东大会|股东会|董事会会议|监事会会议|独立董事|法律意见书'
+      - '股份变动|股份回购|解除质押|质押|投票|章程|制度|更正公告'
+    enabled: true
+
+  # Media is discovery-only. These sources never alert and only enter the
+  # digest observation section after two independent reports cluster together.
+  - id: latepost-discovery
+    entity_id: media_latepost
+    group: capital
+    kind: html
+    url: https://www.latepost.com/
+    fetch_strategy: html_listing
+    cadence: four_hour
+    evidence_type: reputable_media
+    parser: html_links
+    include_url_patterns: ['/news/']
+    exclude_title_patterns: ['^查看更多$|^晚点独家$']
+    detail_fetch_limit: 0
+    max_items: 40
+    enabled: true
+  - id: reuters-ai-discovery
+    entity_id: media_reuters
+    group: capital
+    kind: sitemap
+    url: https://www.reuters.com/arc/outboundfeeds/sitemap/?outputType=xml
+    fetch_strategy: xml_sitemap
+    cadence: four_hour
+    evidence_type: reputable_media
+    parser: sitemap_xml
+    include_url_patterns:
+      - '/artificial-intelligence/'
+      - '/[^/]*(?:openai|anthropic|deepseek|nvidia|xai|mistral|minimax|zhipu|data-center|export-control)[^/]*/?'
+    max_items: 40
+    allow_empty: true
+    enabled: true
+  - id: bloomberg-ai-discovery
+    entity_id: media_bloomberg
+    group: capital
+    kind: rss
+    url: https://feeds.bloomberg.com/technology/news.rss
+    fetch_strategy: rss
+    cadence: four_hour
+    evidence_type: reputable_media
+    parser: rss
+    max_items: 80
+    enabled: true
+  - id: ft-ai-discovery
+    entity_id: media_ft
+    group: capital
+    kind: rss
+    url: https://www.ft.com/artificial-intelligence?format=rss
+    fetch_strategy: rss
+    cadence: four_hour
+    evidence_type: reputable_media
+    parser: rss
+    max_items: 80
+    enabled: true
+  - id: thirtysixkr-ai-discovery
+    entity_id: media_36kr
+    group: capital
+    kind: html
+    url: https://36kr.com/information/AI/
+    fetch_strategy: html_listing
+    cadence: four_hour
+    evidence_type: reputable_media
+    parser: html_links
+    include_url_patterns: ['/p/']
+    exclude_title_patterns: ['^核心服务$']
+    detail_fetch_limit: 0
+    max_items: 40
+    enabled: true
+
+  - id: sensetime-ir
+    entity_id: sensetime
+    group: capital
+    kind: html
+    url: https://www.sensetime.com/cn/investor_corp_governance
+    fetch_strategy: html_listing
+    cadence: four_hour
+    evidence_type: official_company
+    parser: html_links
+    include_url_patterns: ['\.pdf(?:$|\?)']
+    detail_fetch_limit: 0
+    max_items: 50
+    enabled: true
+
+  - id: uk-aisi-research
+    entity_id: uk_aisi
+    group: standards
+    kind: html
+    url: https://www.aisi.gov.uk/research
+    fetch_strategy: html_listing
+    cadence: daily
+    evidence_type: official_standard
+    parser: html_links
+    include_url_patterns: ['^https://www\.aisi\.gov\.uk/research/[^/?#]+$']
+    detail_fetch_limit: 5
+    max_items: 100
+    enabled: true
+  - id: nist-ai-rmf
+    entity_id: nist
+    group: standards
+    kind: html
+    url: https://www.nist.gov/itl/ai-risk-management-framework
+    fetch_strategy: html_listing
+    cadence: daily
+    evidence_type: official_standard
+    parser: html_links
+    include_url_patterns:
+      - '^https://www\.nist\.gov/itl/ai-risk-management-framework/[^/?#]+$'
+      - '^https://www\.nist\.gov/(?:document|programs-projects)/.*(?:ai-rmf|ai-risk|artificial-intelligence-risk)'
+      - '^https://nvlpubs\.nist\.gov/nistpubs/ai/NIST\.AI\..*\.pdf$'
+      - '^https://airc\.nist\.gov/(?:airmf-resources|AI_RMF_Knowledge_Base)/'
+    exclude_url_patterns: ['/webform/|/topics(?:/|$)']
+    detail_fetch_limit: 0
+    max_items: 100
+    enabled: true
+  - id: samr-ai-standards
+    entity_id: samr
+    group: standards
+    kind: samr_standards
+    url: https://std.samr.gov.cn/gb/search/gbQueryPage
+    fetch_strategy: samr_official_json_search
+    cadence: daily
+    evidence_type: official_standard
+    cursor_strategy: keyword_snapshot
+    parser: samr_json
+    search_terms: [人工智能, 大模型]
+    page_size: 50
+    max_pages_per_term: 4
+    enabled: true

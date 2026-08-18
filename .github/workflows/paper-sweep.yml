@@ -1,0 +1,79 @@
+name: Paper Sweep
+
+on:
+  schedule:
+    # 12:43 Asia/Shanghai.
+    - cron: "43 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: radar-database-writer
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  APP_ENV: production
+  APP_TIMEZONE: Asia/Shanghai
+  RADAR_USER_AGENT: ${{ vars.RADAR_USER_AGENT }}
+  QWEN_CLASSIFIER_MODEL: qwen-flash
+  QWEN_SUMMARIZER_MODEL: qwen-plus
+  QWEN_EMBEDDING_MODEL: text-embedding-v4
+  QWEN_DAILY_REEMBED_LIMIT: "100"
+  QWEN_DAILY_CLASSIFY_LIMIT: "300"
+  QWEN_DAILY_SUMMARY_LIMIT: "20"
+
+jobs:
+  paper-sweep:
+    if: github.ref_name == github.event.repository.default_branch
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+      - name: Install backend
+        run: |
+          if [[ -f uv.lock ]]; then
+            uv sync --locked --all-extras
+          else
+            uv sync --all-extras
+          fi
+      - name: Validate collection environment
+        env:
+          RADAR_DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
+          DASHSCOPE_API_KEY: ${{ secrets.DASHSCOPE_API_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+        run: infra/scripts/validate-runtime-env.sh collect
+      - name: Collect papers
+        id: collect
+        continue-on-error: true
+        env:
+          RADAR_DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OPENREVIEW_ACCESS_TOKEN: ${{ secrets.OPENREVIEW_ACCESS_TOKEN }}
+        run: uv run radar collect --group papers
+      - name: Enrich papers and alphaXiv Top-N
+        env:
+          RADAR_DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
+          DASHSCOPE_API_KEY: ${{ secrets.DASHSCOPE_API_KEY }}
+          ALPHAXIV_ACCESS_TOKEN: ${{ secrets.ALPHAXIV_ACCESS_TOKEN }}
+        run: uv run radar enrich --summary-limit 0
+      - name: Fail after preserving usable results
+        if: always() && steps.collect.outcome == 'failure'
+        run: |
+          echo "Paper discovery failed; enrichment of already-discovered items completed." >&2
+          exit 1

@@ -1,0 +1,6 @@
+project_id = "ai-research-radar"
+
+[functions.agentmail-webhook]
+# AgentMail cannot provide a Supabase JWT. The handler verifies the raw request
+# with the Svix signing secret before any database operation.
+verify_jwt = false
