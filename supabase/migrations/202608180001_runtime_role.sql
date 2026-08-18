@@ -9,6 +9,7 @@ begin
       nosuperuser
       nocreatedb
       nocreaterole
+      noreplication
       noinherit
       nobypassrls
       connection limit 8;
@@ -18,6 +19,7 @@ begin
       nosuperuser
       nocreatedb
       nocreaterole
+      noreplication
       noinherit
       nobypassrls
       connection limit 8;
@@ -25,13 +27,18 @@ begin
 end
 $$;
 
-alter role radar_runtime set search_path = public, extensions;
+alter role radar_runtime reset all;
+alter role radar_runtime set search_path = pg_catalog, public, pg_temp;
+alter role radar_runtime set row_security = on;
 alter role radar_runtime set statement_timeout = '20min';
 alter role radar_runtime set idle_in_transaction_session_timeout = '2min';
 
 grant connect on database postgres to radar_runtime;
+revoke all privileges on schema extensions from radar_runtime;
+revoke all privileges on all tables in schema public from radar_runtime;
+revoke all privileges on all sequences in schema public from radar_runtime;
+revoke all privileges on all functions in schema public from radar_runtime;
 grant usage on schema public to radar_runtime;
-grant usage on schema extensions to radar_runtime;
 
 grant select, insert, update, delete on
   public.issuer_master,

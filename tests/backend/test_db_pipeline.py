@@ -4,8 +4,8 @@ import json
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
-from sqlalchemy import func, select
-from sqlalchemy import text as sql_text
+from sqlalchemy import func, select, text as sql_text
+from sqlalchemy.dialects import postgresql
 
 from ai_research_radar.contracts import CollectionBatch, CollectedItem, EventStatus, SourceSpec
 from ai_research_radar.db import (
@@ -22,6 +22,7 @@ from ai_research_radar.db import (
 )
 from ai_research_radar.llm import EmbeddingResult, QwenResult, deterministic_embedding
 from ai_research_radar.pipeline import (
+    _cluster_candidate_query,
     _combined_verification,
     collect_group,
     editorialize_top,
@@ -32,6 +33,110 @@ from ai_research_radar.topics import RuleTopicClassifier
 
 
 ROOT = Path(__file__).parents[2]
+
+
+def test_postgres_cluster_candidate_sql_uses_table_owned_float_array():
+    statement = _cluster_candidate_query(
+        event_id="event-current",
+        event_type="PAPER",
+        threshold=datetime(2026, 8, 1, tzinfo=UTC),
+    )
+
+    compiled = str(statement.compile(dialect=postgresql.dialect()))
+
+    assert "item_versions.embedding" in compiled
+    assert "embedding_vector" not in compiled
+    assert "<=>" not in compiled
+    assert "eligible_cluster_events" in compiled
+    assert "events.first_seen_at" in compiled
+
+
+def test_cluster_candidate_query_bounds_history_and_uses_latest_primary(session):
+    now = datetime.now(UTC)
+    spec = source("cluster-query", entity="openai")
+    sync_source(session, spec)
+    item = ItemModel(
+        id="cluster-item",
+        source_id=spec.id,
+        native_id="cluster-native",
+        canonical_url="https://example.com/cluster-query/item",
+        item_type="rss",
+        entity_id="openai",
+        title="Candidate item",
+        current_content_hash="a" * 64,
+        metadata_json={},
+        first_seen_at=now,
+        last_seen_at=now,
+        created_at=now,
+        updated_at=now,
+    )
+    event = RadarEventModel(
+        id="cluster-event",
+        cluster_id="cluster-event",
+        event_type="MODEL_RELEASE",
+        topics=["agent_systems"],
+        entities=["openai"],
+        cross_tags=[],
+        title_zh="Candidate event",
+        summary_zh="summary",
+        why_it_matters="why",
+        status="NEW_ENTITY",
+        source_type="rss",
+        verification_status="company_claim",
+        score=80,
+        primary_url="https://example.com/cluster-query/item",
+        corroborating_urls=[],
+        is_public=True,
+        first_seen_at=now,
+        created_at=now,
+        updated_at=now,
+    )
+    session.add_all([item, event])
+    session.flush()
+    for version_id, title, fetched_at in (
+        ("cluster-version-old", "Older primary", now - timedelta(hours=1)),
+        ("cluster-version-new", "Latest primary", now),
+    ):
+        session.add(
+            ItemVersionModel(
+                id=version_id,
+                item_id=item.id,
+                version_key=version_id,
+                content_hash=("b" if version_id.endswith("old") else "c") * 64,
+                title=title,
+                fetched_at=fetched_at,
+                embedding=[1.0, *([0.0] * 1023)],
+                metadata_json={"embedding_space": "test-space"},
+            )
+        )
+        session.flush()
+        session.add(
+            EventItemModel(
+                event_id=event.id,
+                item_version_id=version_id,
+                relation="primary",
+            )
+        )
+    session.flush()
+
+    rows = session.execute(
+        _cluster_candidate_query(
+            event_id="different-event",
+            event_type=event.event_type,
+            threshold=now - timedelta(days=14),
+        )
+    ).all()
+    assert len(rows) == 1
+    assert rows[0]._mapping["title"] == "Latest primary"
+
+    expired = session.execute(
+        _cluster_candidate_query(
+            event_id="different-event",
+            event_type=event.event_type,
+            threshold=now + timedelta(seconds=1),
+        )
+    ).all()
+    assert expired == []
 
 
 def source(source_id="lab", *, entity="lab", kind="rss", evidence="official_company"):

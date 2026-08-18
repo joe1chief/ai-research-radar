@@ -9,7 +9,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 import httpx
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from .collectors import UnsupportedCollectorError, collector_for
@@ -827,55 +827,64 @@ def _choose_cluster(
     item_text: str,
 ) -> tuple[str, bool, str | None]:
     threshold = utcnow() - timedelta(days=14)
-    candidate_filter = (
-        RadarEventModel.event_type == event_type,
-        RadarEventModel.first_seen_at >= threshold,
-        RadarEventModel.id != event_id,
-        RadarEventModel.cluster_id == RadarEventModel.id,
-    )
-    if session.get_bind().dialect.name == "postgresql":
-        candidate_query = (
-            select(RadarEventModel)
-            .join(EventItemModel, EventItemModel.event_id == RadarEventModel.id)
-            .join(ItemVersionModel, ItemVersionModel.id == EventItemModel.item_version_id)
-            .where(
-                *candidate_filter,
-                EventItemModel.relation == "primary",
-                ItemVersionModel.embedding_vector.is_not(None),
-                ItemVersionModel.metadata_json["embedding_space"].as_string()
-                == embedding_space,
-            )
-            .order_by(ItemVersionModel.embedding_vector.cosine_distance(embedding))
-            .limit(80)
+    candidate_rows = session.execute(
+        _cluster_candidate_query(
+            event_id=event_id,
+            event_type=event_type,
+            threshold=threshold,
         )
-        candidates = session.execute(candidate_query).scalars().unique().all()
-    else:
-        candidates = session.scalars(
-            select(RadarEventModel).where(*candidate_filter)
-        ).all()
-    for candidate in candidates:
+    ).all()
+    ranked_candidates: list[
+        tuple[
+            float,
+            RadarEventModel,
+            str,
+            str | None,
+            str | None,
+        ]
+    ] = []
+    for (
+        candidate,
+        linked_title,
+        linked_abstract,
+        linked_normalized,
+        linked_embedding,
+        linked_metadata,
+    ) in candidate_rows:
+        if not linked_embedding:
+            continue
+        if (linked_metadata or {}).get("embedding_space") != embedding_space:
+            continue
+        similarity = cosine_similarity(embedding, linked_embedding)
+        ranked_candidates.append(
+            (
+                similarity,
+                candidate,
+                linked_title,
+                linked_abstract,
+                linked_normalized,
+            )
+        )
+
+    # pgvector previously applied this bound while ordering with `<=>`. Keep
+    # the same nearest-neighbour budget, but rank the table-owned float4[]
+    # values in Python so the runtime role needs no extension-schema access.
+    ranked_candidates.sort(key=lambda row: row[0], reverse=True)
+    for (
+        similarity,
+        candidate,
+        linked_title,
+        linked_abstract,
+        linked_normalized,
+    ) in ranked_candidates[:80]:
         if (
             event_type != "PAPER"
             and item.entity_id
             and item.entity_id not in (candidate.entities or [])
         ):
             continue
-        linked = session.scalar(
-            select(ItemVersionModel)
-            .join(EventItemModel, EventItemModel.item_version_id == ItemVersionModel.id)
-            .where(
-                EventItemModel.event_id == candidate.id,
-                EventItemModel.relation == "primary",
-            )
-            .order_by(ItemVersionModel.fetched_at.desc())
-        )
-        if linked is None or not linked.embedding:
-            continue
-        if (linked.metadata_json or {}).get("embedding_space") != embedding_space:
-            continue
-        similarity = cosine_similarity(embedding, linked.embedding)
         if event_type == "PAPER" and normalize_content(item.title).casefold() == normalize_content(
-            linked.title
+            linked_title
         ).casefold():
             similarity = max(similarity, 0.99)
         decision = cluster_decision(
@@ -888,12 +897,86 @@ def _choose_cluster(
         )
         should_merge = decision == ClusterDecision.MERGE
         if decision == ClusterDecision.LLM_REVIEW and qwen is not None:
-            candidate_text = f"{linked.title}\n{linked.abstract_text or ''}\n{linked.normalized_text or ''}"
+            candidate_text = (
+                f"{linked_title}\n{linked_abstract or ''}\n{linked_normalized or ''}"
+            )
             adjudication = qwen.adjudicate_merge(item_text, candidate_text)
             should_merge = bool(adjudication and adjudication.same_event)
         if should_merge:
             return candidate.cluster_id, True, candidate.id
     return event_id, False, None
+
+
+def _cluster_candidate_query(
+    *,
+    event_id: str,
+    event_type: str,
+    threshold: datetime,
+):
+    """Return recent root events with their latest primary float-array embedding.
+
+    The query deliberately selects ``item_versions.embedding`` rather than the
+    pgvector mirror column. Similarity ordering remains a Python concern, which
+    keeps the runtime path independent of operators and functions in the
+    PostgreSQL extensions schema.
+    """
+
+    eligible_events = (
+        select(RadarEventModel.id.label("event_id"))
+        .where(
+            RadarEventModel.event_type == event_type,
+            RadarEventModel.first_seen_at >= threshold,
+            RadarEventModel.id != event_id,
+            RadarEventModel.cluster_id == RadarEventModel.id,
+        )
+        .subquery("eligible_cluster_events")
+    )
+    latest_primary = (
+        select(
+            EventItemModel.event_id.label("event_id"),
+            ItemVersionModel.title.label("title"),
+            ItemVersionModel.abstract_text.label("abstract_text"),
+            ItemVersionModel.normalized_text.label("normalized_text"),
+            ItemVersionModel.embedding.label("embedding"),
+            ItemVersionModel.metadata_json.label("metadata"),
+            func.row_number()
+            .over(
+                partition_by=EventItemModel.event_id,
+                order_by=(
+                    ItemVersionModel.fetched_at.desc(),
+                    ItemVersionModel.id.desc(),
+                ),
+            )
+            .label("version_rank"),
+        )
+        .select_from(EventItemModel)
+        .join(
+            eligible_events,
+            eligible_events.c.event_id == EventItemModel.event_id,
+        )
+        .join(
+            ItemVersionModel,
+            ItemVersionModel.id == EventItemModel.item_version_id,
+        )
+        .where(EventItemModel.relation == "primary")
+        .subquery("latest_primary_item_version")
+    )
+    return (
+        select(
+            RadarEventModel,
+            latest_primary.c.title,
+            latest_primary.c.abstract_text,
+            latest_primary.c.normalized_text,
+            latest_primary.c.embedding,
+            latest_primary.c.metadata,
+        )
+        .join(latest_primary, latest_primary.c.event_id == RadarEventModel.id)
+        .where(
+            latest_primary.c.version_rank == 1,
+            latest_primary.c.embedding.is_not(None),
+        )
+        .order_by(RadarEventModel.id)
+    )
 
 
 def _event_type_for(item: ItemModel, version: ItemVersionModel, kind: str) -> str:

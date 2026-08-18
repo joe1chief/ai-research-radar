@@ -21,9 +21,24 @@ static JSON.
 4. Production requires hosted Supabase pgvector. The migration adds
    `embedding_vector vector(1024)` and an HNSW cosine index; startup fails closed
    if the vector column is unavailable. SQLite remains the credential-free local path.
-5. Use the pooler transaction connection string for GitHub Actions. Percent-
-   encode special characters in the password. Never put this URL in repository
+5. Use the pooler session connection string for GitHub Actions. Percent-encode
+   special characters in the password. Never put this URL in repository
    variables or Pages data.
+6. The `radar_runtime` login is intentionally limited to CRUD on the 15 named
+   Radar tables. It has one explicit RLS policy per table, no `BYPASSRLS`, no
+   membership or object ownership, no non-system function access, and no
+   default grants. Validate the live boundary without retaining probe data:
+
+   ```bash
+   RADAR_DATABASE_URL=... uv run python infra/scripts/validate-runtime-db.py
+   ```
+
+   Any future function in `public` must revoke `EXECUTE` from `PUBLIC` in the
+   same migration and explicitly grant only its intended caller. PostgreSQL
+   otherwise makes new functions executable by `PUBLIC`; the runtime validator
+   treats that drift as a failure. Changing the database-wide function default
+   privileges is a separate Supabase governance decision, not part of this
+   role's grants.
 
 The server-side exporter uses an explicit ORM field allow-list and validates the
 result before writing JSON; the SQL view remains a defense-in-depth audit surface.
