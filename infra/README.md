@@ -55,8 +55,11 @@ supabase secrets set AGENTMAIL_WEBHOOK_SECRET=whsec_REDACTED
 supabase functions deploy agentmail-webhook --no-verify-jwt
 ```
 
-`SUPABASE_URL` and the hosted service-role/secret key are supplied by the Edge
-Function runtime. For local serving, set `SUPABASE_SERVICE_ROLE_KEY` explicitly.
+`SUPABASE_URL` and the hosted `SUPABASE_SECRET_KEYS` JSON dictionary are supplied
+by the Edge Function runtime. The webhook reads its `default` new-style secret
+key and does not depend on the legacy service-role key. For local serving only,
+set `SUPABASE_SECRET_KEY` to an explicit new-style secret key.
+
 Register this URL with AgentMail:
 
 ```text
@@ -100,7 +103,8 @@ Add these repository variables:
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `RADAR_USER_AGENT` | required | Contact-bearing user-agent for SEC/arXiv requests |
+| `RADAR_USER_AGENT` | required | General identity for non-SEC collection requests |
+| `SEC_USER_AGENT` | required | Dedicated SEC identity containing a monitored public operations email |
 | `LLM_PROVIDER` | `dashscope` | `dashscope` or `yicloud`; switch to YiCloud only after its smoke test passes |
 | `YICLOUD_CLASSIFIER_MODEL` | required for YiCloud | Account-verified TokenFactory classifier model ID |
 | `YICLOUD_SUMMARIZER_MODEL` | required for YiCloud | Account-verified TokenFactory summarizer model ID |
@@ -115,6 +119,13 @@ Secrets are scoped to the single step that consumes them; dependency install and
 frontend build steps never receive database, mail, model, or recipient secrets.
 No command interpolates a secret into shell source. All Actions are pinned to a
 full commit SHA, and scheduled workflows run only from the default branch.
+
+Set `SEC_USER_AGENT` as a repository variable, not a secret, in the form
+`AIResearchRadar/0.1 contact=<public-operations-email>`, replacing the bracketed
+placeholder with the monitored address. The runtime rejects a missing identity
+or the documented placeholder. SEC requests use this identity exclusively and
+share a four-requests-per-second domain throttle; ordinary collectors continue
+to use `RADAR_USER_AGENT`.
 
 Production workflows pair `LLM_PROVIDER` with a fixed host, the corresponding
 provider secret, and provider-specific model variables. YiCloud always starts

@@ -8,6 +8,7 @@ from sqlalchemy import func, select, text as sql_text
 from sqlalchemy.dialects import postgresql
 
 from ai_research_radar.contracts import CollectionBatch, CollectedItem, EventStatus, SourceSpec
+from ai_research_radar.collectors.base import CollectorHTTPError
 from ai_research_radar.db import (
     EventItemModel,
     EventRevisionModel,
@@ -742,6 +743,122 @@ def test_collection_releases_database_transaction_before_external_io(session, mo
 
     assert stats.sources == 1
     assert stats.degraded == 1
+
+
+def test_collection_synchronizes_disabled_source_and_clears_stale_failure(session, monkeypatch):
+    enabled = source("disabled-after-failure")
+    source_row = sync_source(session, enabled)
+    health = SourceHealthModel(
+        source_id=enabled.id,
+        status="failing",
+        consecutive_failures=4,
+        last_http_status=503,
+        last_error="stale failure",
+        metadata_json={},
+    )
+    source_row.next_due_at = datetime.now(UTC) + timedelta(minutes=30)
+    session.add(health)
+    session.commit()
+
+    monkeypatch.setattr(
+        "ai_research_radar.pipeline.collector_for",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("disabled source must not construct a collector")
+        ),
+    )
+    disabled = enabled.model_copy(update={"enabled": False})
+
+    stats = collect_group(
+        session,
+        [disabled],
+        group="tech",
+        user_agent="AIResearchRadar/test",
+    )
+
+    source_row = session.get(type(source_row), enabled.id)
+    health = session.get(SourceHealthModel, enabled.id)
+    assert stats.sources == 0
+    assert source_row.enabled is False
+    assert source_row.next_due_at is None
+    assert health.status == "disabled"
+    assert health.consecutive_failures == 0
+    assert health.last_http_status is None
+    assert health.last_error is None
+
+
+def test_collection_scopes_sec_identity_and_throttle_to_sec_only(session, monkeypatch):
+    generic = source("generic-identity")
+    sec = source("sec-identity", kind="sec_submissions")
+    seen: dict[str, dict] = {}
+
+    class Collector:
+        last_http_status = 200
+
+        def collect(self, cursor):
+            return CollectionBatch(cursor=cursor)
+
+        def close(self):
+            return None
+
+    def capture(spec, **kwargs):
+        seen[spec.id] = kwargs
+        return Collector()
+
+    monkeypatch.setattr("ai_research_radar.pipeline.collector_for", capture)
+
+    collect_group(
+        session,
+        [generic, sec],
+        group="tech",
+        user_agent="AIResearchRadar/general",
+        sec_user_agent="AIResearchRadar/sec contact=ops@radar.invalid",
+    )
+
+    assert seen[generic.id]["user_agent"] == "AIResearchRadar/general"
+    assert "request_throttle" not in seen[generic.id]
+    assert seen[sec.id]["user_agent"] == (
+        "AIResearchRadar/sec contact=ops@radar.invalid"
+    )
+    assert callable(seen[sec.id]["request_throttle"])
+    assert session.get(SourceHealthModel, generic.id).last_http_status == 200
+    assert session.get(SourceHealthModel, sec.id).last_http_status == 200
+
+
+def test_collection_persists_safe_http_failure_fields(session, monkeypatch, caplog):
+    spec = source("http-failure")
+
+    class Collector:
+        def collect(self, _cursor):
+            raise CollectorHTTPError(
+                "failed to fetch http-failure: host=data.sec.gov "
+                "status_code=403 retryable=false error_type=HTTPStatusError",
+                status_code=403,
+                retryable=False,
+                host="data.sec.gov",
+            )
+
+        def close(self):
+            return None
+
+    monkeypatch.setattr(
+        "ai_research_radar.pipeline.collector_for",
+        lambda *args, **kwargs: Collector(),
+    )
+
+    stats = collect_group(
+        session,
+        [spec],
+        group="tech",
+        user_agent="AIResearchRadar/test",
+    )
+
+    health = session.get(SourceHealthModel, spec.id)
+    assert stats.failed == 1
+    assert health.last_http_status == 403
+    assert health.last_error.endswith("error_type=HTTPStatusError")
+    assert "status_code=403" in caplog.text
+    assert "retryable=False" in caplog.text
+    assert "host=data.sec.gov" in caplog.text
 
 
 def test_collection_recovers_after_invalidated_source_transaction(tmp_path, monkeypatch):

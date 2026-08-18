@@ -23,6 +23,31 @@ function nonEmptyString(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
+export function resolveSupabaseSecretKey(
+  secretKeysJson: string | undefined,
+  localSecretKey?: string,
+): string {
+  if (secretKeysJson) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(secretKeysJson);
+    } catch {
+      throw new Error("SUPABASE_SECRET_KEYS must be valid JSON");
+    }
+
+    const defaultKey = nonEmptyString(asObject(parsed)?.default);
+    if (!defaultKey) {
+      throw new Error("SUPABASE_SECRET_KEYS is missing the default secret key");
+    }
+    return defaultKey;
+  }
+
+  const explicitLocalKey = nonEmptyString(localSecretKey);
+  if (explicitLocalKey) return explicitLocalKey;
+
+  throw new Error("Missing Supabase secret key configuration");
+}
+
 export function extractMessageId(payload: JsonObject): string | null {
   for (const key of ["send", "delivery", "bounce", "complaint", "reject", "message"]) {
     const candidate = asObject(payload[key]);

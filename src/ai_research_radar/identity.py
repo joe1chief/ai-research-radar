@@ -22,6 +22,10 @@ TRACKING_KEYS = {
 def normalize_content(value: str) -> str:
     value = html.unescape(value or "")
     value = unicodedata.normalize("NFKC", value)
+    # PostgreSQL text values cannot contain NUL bytes. Treat them as word
+    # boundaries so malformed upstream HTML cannot either break persistence or
+    # silently join the surrounding words together.
+    value = value.replace("\x00", " ")
     value = re.sub(r"<[^>]+>", " ", value)
     return re.sub(r"\s+", " ", value).strip()
 

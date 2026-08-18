@@ -1,5 +1,9 @@
 import { createClient } from "@supabase/supabase-js";
-import { parseAgentMailEvent, verifySvixPayload } from "./logic.ts";
+import {
+  parseAgentMailEvent,
+  resolveSupabaseSecretKey,
+  verifySvixPayload,
+} from "./logic.ts";
 
 const MAX_BODY_BYTES = 1_048_576;
 
@@ -76,11 +80,10 @@ Deno.serve(async (request: Request) => {
 
   try {
     const supabaseUrl = requiredEnv("SUPABASE_URL");
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ??
-      Deno.env.get("SUPABASE_SECRET_KEY");
-    if (!serviceKey) {
-      throw new Error("Missing Supabase service-role/secret key");
-    }
+    const serviceKey = resolveSupabaseSecretKey(
+      Deno.env.get("SUPABASE_SECRET_KEYS"),
+      Deno.env.get("SUPABASE_SECRET_KEY"),
+    );
 
     const supabase = createClient(supabaseUrl, serviceKey, {
       auth: { persistSession: false, autoRefreshToken: false },

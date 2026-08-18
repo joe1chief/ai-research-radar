@@ -9,6 +9,11 @@
 4. Add the secrets and variables documented in `.env.example` to GitHub.
 5. Run the workflows manually in shadow mode before enabling live delivery.
 
+`SEC_USER_AGENT` must contain a monitored public operations email and must be
+configured as a repository variable. Do not put credentials or a private
+recipient address in it. A SEC `403` is non-retryable: verify this identity
+before treating the regulator endpoint as unavailable.
+
 Never paste secret values into issues, logs, the public archive, or repository
 variables. Recipient addresses are secrets, not variables.
 
@@ -43,6 +48,12 @@ A source failure is isolated. After three consecutive failures, record a
 degraded source-health state. The nightly job prints the exact failed-source
 list and exits non-zero so GitHub Actions raises the operational notification;
 the application does not claim a separate per-source paging service.
+
+Use `source_health.last_http_status` to distinguish access/configuration
+failures from transport failures. `429` and `5xx` remain retryable; other
+`4xx` responses are recorded after one request. Top-level source-failure logs
+intentionally contain only source ID, error class, connection-invalidated
+state, HTTP status, retryability, and hostname.
 
 Review sources monthly. GitHub may disable scheduled workflows in an inactive
 public repository; repository notifications and the documented,

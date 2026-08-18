@@ -148,8 +148,40 @@ class HtmlListingCollector(BaseCollector):
                         str(detail_response.url),
                     )
                 except (CollectorHTTPError, httpx.HTTPError, ValueError, json.JSONDecodeError) as exc:
-                    warnings.append(f"detail fetch failed for {item.canonical_url}: {exc}")
-            items = list(enriched.values())
+                    # Canonical URLs can contain sensitive query parameters.
+                    # Persist only the exception class; structured HTTP status
+                    # remains available through source_health.last_http_status.
+                    warnings.append(
+                        f"detail fetch failed: error_type={type(exc).__name__}"
+                    )
+            # A listing can expose multiple aliases that redirect to, or name,
+            # the same canonical detail page. Keep the first item in listing
+            # order after detail canonicalization so the result is stable and
+            # cannot violate the database's canonical URL uniqueness contract.
+            deduplicated: dict[str, CollectedItem] = {}
+            for item in enriched.values():
+                existing = deduplicated.get(item.canonical_url)
+                if existing is None:
+                    deduplicated[item.canonical_url] = item
+                    continue
+                updates: dict[str, Any] = {}
+                for field in (
+                    "summary",
+                    "content",
+                    "authors",
+                    "published_at",
+                    "updated_at",
+                    "raw_snapshot",
+                ):
+                    if not getattr(existing, field) and getattr(item, field):
+                        updates[field] = getattr(item, field)
+                if item.metadata:
+                    updates["metadata"] = {**existing.metadata, **item.metadata}
+                if updates:
+                    deduplicated[item.canonical_url] = existing.model_copy(
+                        update=updates
+                    )
+            items = list(deduplicated.values())
         return CollectionBatch(items=items, cursor=next_cursor, warnings=warnings[:10])
 
 

@@ -8,7 +8,7 @@ import pytest
 
 from ai_research_radar.collectors.arxiv import ArxivCollector
 from ai_research_radar.collectors.arxiv_oai import ArxivOAICollector
-from ai_research_radar.collectors.base import CollectorHTTPError
+from ai_research_radar.collectors.base import CollectorHTTPError, DomainRequestThrottle
 from ai_research_radar.collectors.github import GitHubReleaseCollector
 from ai_research_radar.collectors.html import HtmlListingCollector
 from ai_research_radar.collectors.huggingface import HuggingFaceModelsCollector
@@ -17,6 +17,7 @@ from ai_research_radar.collectors.sec import SECSubmissionsCollector
 from ai_research_radar.collectors.sitemap import SitemapCollector
 from ai_research_radar.collectors.sse import SSEAnnouncementsCollector
 from ai_research_radar.contracts import SourceSpec
+from ai_research_radar.identity import stable_id
 from ai_research_radar.pipeline import _source_authorization
 
 
@@ -57,6 +58,26 @@ def test_rss_etag_and_304():
     second = collector.collect(first.cursor)
     assert second.not_modified
     assert seen_headers[1]["If-None-Match"] == '"v1"'
+
+
+def test_collector_identity_overrides_shared_client_default():
+    seen_user_agents: list[str] = []
+
+    def handler(request):
+        seen_user_agents.append(request.headers["User-Agent"])
+        return httpx.Response(200, text="<rss><channel/></rss>", request=request)
+
+    shared = httpx.Client(
+        transport=httpx.MockTransport(handler),
+        headers={"User-Agent": "shared-client-default"},
+    )
+    RSSCollector(
+        spec("rss"),
+        client=shared,
+        user_agent="AIResearchRadar/scoped",
+    ).collect()
+
+    assert seen_user_agents == ["AIResearchRadar/scoped"]
 
 
 def test_rss_max_items_caps_feed_in_source_order():
@@ -216,8 +237,169 @@ def test_cross_site_redirect_is_rejected():
         return httpx.Response(302, headers={"Location": "https://evil.test/feed"}, request=request)
 
     collector = RSSCollector(spec("rss"), client=client(handler), max_attempts=1)
-    with pytest.raises(CollectorHTTPError, match="cross-site"):
+    with pytest.raises(CollectorHTTPError, match="cross-site") as caught:
         collector.collect()
+    assert caught.value.status_code == 302
+
+
+@pytest.mark.parametrize("status_code", [400, 401, 403, 404])
+def test_non_rate_limit_client_errors_fail_without_retry_and_are_redacted(status_code):
+    calls = 0
+    sleeps: list[float] = []
+
+    def handler(request):
+        nonlocal calls
+        calls += 1
+        return httpx.Response(
+            status_code,
+            text="provider body containing private-token",
+            request=request,
+        )
+
+    collector = RSSCollector(
+        spec("rss", url="https://example.com/private/feed?api_key=private-token"),
+        client=client(handler),
+        max_attempts=3,
+        sleep=sleeps.append,
+    )
+    with pytest.raises(CollectorHTTPError) as caught:
+        collector.collect()
+
+    assert calls == 1
+    assert sleeps == []
+    assert caught.value.status_code == status_code
+    assert caught.value.retryable is False
+    assert caught.value.host == "example.com"
+    assert "private-token" not in str(caught.value)
+    assert "/private/feed" not in str(caught.value)
+
+
+def test_rate_limit_and_server_errors_retry_before_success():
+    statuses = iter([429, 503, 200])
+    sleeps: list[float] = []
+
+    def handler(request):
+        return httpx.Response(next(statuses), text="<rss><channel/></rss>", request=request)
+
+    collector = RSSCollector(
+        spec("rss"),
+        client=client(handler),
+        max_attempts=3,
+        sleep=sleeps.append,
+    )
+
+    batch = collector.collect()
+
+    assert batch.items == []
+    assert len(sleeps) == 2
+    assert collector.last_http_status == 200
+
+
+def test_server_error_exhaustion_keeps_structured_retryable_status():
+    calls = 0
+
+    def handler(request):
+        nonlocal calls
+        calls += 1
+        return httpx.Response(503, text="private provider response", request=request)
+
+    collector = RSSCollector(
+        spec("rss", url="https://feeds.example.com/rss"),
+        client=client(handler),
+        max_attempts=2,
+        sleep=lambda _delay: None,
+    )
+    with pytest.raises(CollectorHTTPError) as caught:
+        collector.collect()
+
+    assert calls == 2
+    assert caught.value.status_code == 503
+    assert caught.value.retryable is True
+    assert caught.value.host == "feeds.example.com"
+    assert "private provider response" not in str(caught.value)
+
+
+def test_timeout_retries_and_final_failure_exposes_only_safe_fields():
+    calls = 0
+    sleeps: list[float] = []
+
+    def handler(request):
+        nonlocal calls
+        calls += 1
+        raise httpx.ReadTimeout("private-token in transport message", request=request)
+
+    collector = RSSCollector(
+        spec("rss", url="https://feeds.example.com/rss?token=private-token"),
+        client=client(handler),
+        max_attempts=2,
+        sleep=sleeps.append,
+    )
+    with pytest.raises(CollectorHTTPError) as caught:
+        collector.collect()
+
+    assert calls == 2
+    assert len(sleeps) == 1
+    assert caught.value.status_code is None
+    assert caught.value.retryable is True
+    assert caught.value.host == "feeds.example.com"
+    assert "private-token" not in str(caught.value)
+    assert caught.value.__cause__ is None
+    assert caught.value.__context__ is None
+
+
+def test_remote_protocol_error_retries_without_retaining_request_details():
+    calls = 0
+
+    def handler(request):
+        nonlocal calls
+        calls += 1
+        raise httpx.RemoteProtocolError(
+            "private-token in remote protocol message",
+            request=request,
+        )
+
+    collector = RSSCollector(
+        spec("rss", url="https://feeds.example.com/rss?token=private-token"),
+        client=client(handler),
+        max_attempts=2,
+        sleep=lambda _delay: None,
+    )
+    with pytest.raises(CollectorHTTPError) as caught:
+        collector.collect()
+
+    assert calls == 2
+    assert caught.value.retryable is True
+    assert "private-token" not in str(caught.value)
+    assert caught.value.__cause__ is None
+    assert caught.value.__context__ is None
+
+
+def test_domain_throttle_shares_slots_across_sec_subdomains():
+    class FakeTime:
+        now = 100.0
+
+        def __init__(self):
+            self.sleeps: list[float] = []
+
+        def monotonic(self):
+            return self.now
+
+        def sleep(self, delay):
+            self.sleeps.append(delay)
+            self.now += delay
+
+    fake = FakeTime()
+    throttle = DomainRequestThrottle(
+        0.25,
+        clock=fake.monotonic,
+        sleep=fake.sleep,
+    )
+
+    throttle.wait("https://data.sec.gov/submissions/one.json")
+    throttle.wait("https://www.sec.gov/Archives/two.htm")
+    throttle.wait("https://example.com/unrelated")
+
+    assert fake.sleeps == [pytest.approx(0.25)]
 
 
 def test_html_source_patterns_exclude_navigation_and_mark_routine_filings():
@@ -269,6 +451,102 @@ def test_html_detail_rejects_javascript_and_cross_site_structured_urls():
     item = HtmlListingCollector(detail_spec, client=client(handler)).collect().items[0]
     assert item.canonical_url == "https://example.com/research/safe"
     assert item.metadata["code_url"] is None
+
+
+def test_html_detail_failure_warning_does_not_persist_url_or_query():
+    detail_spec = SourceSpec(
+        **{
+            **spec("html", url="https://example.com/news").model_dump(),
+            "detail_fetch_limit": 1,
+        }
+    )
+    listing = '<a href="/news/release?access_token=private-token">Release</a>'
+
+    def handler(request):
+        if request.url.path == "/news":
+            return httpx.Response(200, text=listing, request=request)
+        return httpx.Response(403, text="private-token", request=request)
+
+    batch = HtmlListingCollector(
+        detail_spec,
+        client=client(handler),
+        max_attempts=1,
+    ).collect()
+
+    assert batch.warnings == ["detail fetch failed: error_type=CollectorHTTPError"]
+    assert "private-token" not in batch.warnings[0]
+    assert "/news/release" not in batch.warnings[0]
+
+
+def test_html_detail_deduplicates_redirected_canonical_collisions_in_listing_order():
+    detail_spec = SourceSpec(
+        **{
+            **spec("html", url="https://example.com/news/").model_dump(),
+            "detail_fetch_limit": 2,
+        }
+    )
+    listing = """
+    <a href="/news/alias-first">First release alias</a>
+    <a href="/news/alias-second">Second release alias</a>
+    """
+    detail = """<html><body><article><p>Canonical release detail.</p></article></body></html>"""
+
+    def handler(request):
+        if request.url.path == "/news/":
+            return httpx.Response(200, text=listing, request=request)
+        if request.url.path in {"/news/alias-first", "/news/alias-second"}:
+            return httpx.Response(
+                302,
+                headers={"Location": "/news/canonical-release"},
+                request=request,
+            )
+        return httpx.Response(
+            200,
+            text=detail,
+            headers={"content-type": "text/html"},
+            request=request,
+        )
+
+    items = HtmlListingCollector(detail_spec, client=client(handler)).collect().items
+
+    assert len(items) == 1
+    assert items[0].canonical_url == "https://example.com/news/canonical-release"
+    assert items[0].title == "First release alias"
+
+
+def test_html_canonical_dedupe_preserves_first_identity_and_merges_detail_content():
+    detail_spec = SourceSpec(
+        **{
+            **spec("html", url="https://example.com/news/").model_dump(),
+            "detail_fetch_limit": 1,
+        }
+    )
+    listing = """
+    <a href="/news/canonical-release">Plain entry</a>
+    <a href="/news/model-release-alias">Model release article</a>
+    """
+    detail = """<html><head><meta property="og:url"
+      content="https://example.com/news/canonical-release"></head>
+      <body><article><p>Canonical release detail.</p></article></body></html>"""
+
+    def handler(request):
+        if request.url.path == "/news/":
+            return httpx.Response(200, text=listing, request=request)
+        return httpx.Response(
+            200,
+            text=detail,
+            headers={"content-type": "text/html"},
+            request=request,
+        )
+
+    items = HtmlListingCollector(detail_spec, client=client(handler)).collect().items
+
+    assert len(items) == 1
+    assert items[0].title == "Plain entry"
+    assert items[0].external_id == stable_id(
+        "https://example.com/news/canonical-release"
+    )
+    assert items[0].content == "Canonical release detail."
 
 
 def test_source_authorization_is_scoped_to_the_intended_api():

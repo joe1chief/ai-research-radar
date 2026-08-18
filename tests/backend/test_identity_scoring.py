@@ -1,6 +1,12 @@
 from ai_research_radar.contracts import EventStatus, VerificationStatus
 from ai_research_radar.dedupe import ClusterDecision, cluster_decision
-from ai_research_radar.identity import canonicalize_url, content_hash, parse_arxiv_identity, stable_id
+from ai_research_radar.identity import (
+    canonicalize_url,
+    content_hash,
+    normalize_content,
+    parse_arxiv_identity,
+    stable_id,
+)
 from ai_research_radar.scoring import alert_eligible, score_event
 
 
@@ -11,6 +17,11 @@ def test_url_and_content_identities_are_stable():
     assert content_hash("Ａ  B\n") == content_hash("A B")
     assert stable_id("Source", "ABC") == stable_id("source", "abc")
     assert parse_arxiv_identity("https://arxiv.org/abs/2501.12345v3") == ("2501.12345", 3)
+
+
+def test_content_normalization_removes_nul_without_joining_words():
+    assert normalize_content("DeepSeek\x00release") == "DeepSeek release"
+    assert "\x00" not in normalize_content("before&#0;after\x00done")
 
 
 def test_cluster_thresholds_and_arxiv_boundary():
