@@ -104,10 +104,12 @@ def test_first_run_uses_lookback_window_and_keeps_newest_first_detail_budget():
         },
     ]
     detail_requests: list[str] = []
+    throttled_requests: list[str] = []
     collector = SECSubmissionsCollector(
         _spec(),
         client=_client(_payload(rows), detail_requests),
         now=lambda: NOW,
+        request_throttle=throttled_requests.append,
     )
 
     batch = collector.collect()
@@ -122,6 +124,7 @@ def test_first_run_uses_lookback_window_and_keeps_newest_first_detail_budget():
     assert batch.items[0].content == "Material filing detail."
     assert batch.items[1].content == ""
     assert batch.warnings == []
+    assert throttled_requests == [SUBMISSIONS_URL, detail_requests[0]]
 
 
 def test_incremental_run_stops_at_last_seen_accession_even_inside_lookback():

@@ -15,6 +15,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from .collectors import UnsupportedCollectorError, collector_for
+from .collectors.base import CollectorHTTPError, DomainRequestThrottle
 from .config import load_issuers
 from .contracts import EventStatus, RadarEvent, SourceSpec, Topic, VerificationStatus
 from .db import (
@@ -54,6 +55,11 @@ CAPITAL_EVENT_TYPES = {
     "REGULATORY_EXPORT",
 }
 
+# The SEC publishes a 10 requests/second ceiling. A shared 250 ms reservation
+# interval keeps this process at a conservative maximum of four requests/second
+# across data.sec.gov and www.sec.gov, including retries and redirects.
+SEC_MIN_REQUEST_INTERVAL_SECONDS = 0.25
+
 
 @dataclass(slots=True)
 class CollectionStats:
@@ -76,6 +82,7 @@ def collect_group(
     *,
     group: str,
     user_agent: str,
+    sec_user_agent: str | None = None,
     shared_client: httpx.Client | None = None,
     force: bool = False,
     github_token: str | None = None,
@@ -92,11 +99,26 @@ def collect_group(
     """
 
     stats = CollectionStats()
+    sec_throttle = DomainRequestThrottle(SEC_MIN_REQUEST_INTERVAL_SECONDS)
     for spec in sources:
-        if not spec.enabled or spec.group != group:
+        if spec.group != group:
+            continue
+        source_row = sync_source(session, spec)
+        if not spec.enabled:
+            # Disabled sources still need their version-controlled state
+            # synchronized. Otherwise a source disabled after production
+            # failures remains enabled/failing forever in the database and in
+            # maintenance reporting.
+            health = ensure_source_health(session, spec.id)
+            health.status = "disabled"
+            health.consecutive_failures = 0
+            health.last_http_status = None
+            health.last_error = None
+            health.updated_at = utcnow()
+            source_row.next_due_at = None
+            session.commit()
             continue
         stats.sources += 1
-        source_row = sync_source(session, spec)
         now = utcnow()
         due = source_row.next_due_at
         if due is not None and due.tzinfo is None:
@@ -116,16 +138,21 @@ def collect_group(
         if cursor_transform is not None:
             cursor_payload = cursor_transform(spec, dict(cursor_payload))
         try:
-            collector = collector_for(
-                spec,
-                client=shared_client,
-                user_agent=user_agent,
-                authorization=_source_authorization(
+            collector_user_agent = user_agent
+            if spec.kind == "sec_submissions":
+                collector_user_agent = sec_user_agent or user_agent
+            collector_kwargs: dict[str, Any] = {
+                "client": shared_client,
+                "user_agent": collector_user_agent,
+                "authorization": _source_authorization(
                     spec.kind,
                     github_token=github_token,
                     openreview_access_token=openreview_access_token,
                 ),
-            )
+            }
+            if spec.kind == "sec_submissions":
+                collector_kwargs["request_throttle"] = sec_throttle.wait
+            collector = collector_for(spec, **collector_kwargs)
         except UnsupportedCollectorError as exc:
             stats.skipped += 1
             health = ensure_source_health(session, spec.id)
@@ -198,6 +225,7 @@ def collect_group(
                 health.status = "healthy" if not batch.warnings else "degraded"
                 health.last_success_at = utcnow()
                 health.consecutive_failures = 0
+                health.last_http_status = getattr(collector, "last_http_status", None)
                 health.last_error = "; ".join(batch.warnings)[:2000] or None
                 source_row.next_due_at = utcnow() + _cadence_delta(spec.cadence)
                 health.updated_at = utcnow()
@@ -212,11 +240,16 @@ def collect_group(
             # when the work used a savepoint. Roll it back fully before trying
             # to persist source health on a replacement connection.
             session.rollback()
+            http_error = exc if isinstance(exc, CollectorHTTPError) else None
             LOGGER.warning(
-                "source collection failed: source_id=%s error_type=%s connection_invalidated=%s",
+                "source collection failed: source_id=%s error_type=%s "
+                "connection_invalidated=%s status_code=%s retryable=%s host=%s",
                 spec.id,
                 type(exc).__name__,
                 bool(getattr(exc, "connection_invalidated", False)),
+                http_error.status_code if http_error is not None else None,
+                http_error.retryable if http_error is not None else False,
+                http_error.host if http_error is not None else None,
             )
             stats.failed += 1
             source_row = session.get(SourceModel, spec.id)
@@ -225,6 +258,9 @@ def collect_group(
             health = ensure_source_health(session, spec.id)
             health.status = "failing"
             health.consecutive_failures += 1
+            health.last_http_status = (
+                http_error.status_code if http_error is not None else None
+            )
             health.last_error = str(exc)[:2000]
             source_row.next_due_at = utcnow() + timedelta(minutes=30)
             health.updated_at = utcnow()

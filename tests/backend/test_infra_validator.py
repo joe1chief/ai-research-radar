@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import runpy
+import subprocess
 from pathlib import Path
 
 
@@ -65,3 +66,52 @@ def test_delivery_mappings_in_multiline_env_value_do_not_count():
     validate_step_env_contracts("synthetic.yml", workflow, failures)
 
     assert any("RADAR_DATABASE_URL" in failure for failure in failures)
+
+
+def _collect_runtime_env(*, sec_user_agent: str | None = None) -> dict[str, str]:
+    env = {
+        "RADAR_DATABASE_URL": "postgresql://runtime@database.invalid/radar",
+        "RADAR_USER_AGENT": "AIResearchRadar/test",
+        "SUPABASE_URL": "https://project.supabase.invalid",
+        "SUPABASE_SECRET_KEY": "test-only",
+        "LLM_API_KEY": "test-only",
+    }
+    if sec_user_agent is not None:
+        env["SEC_USER_AGENT"] = sec_user_agent
+    return env
+
+
+def test_collect_runtime_requires_non_placeholder_sec_identity():
+    validator = ROOT / "infra/scripts/validate-runtime-env.sh"
+
+    missing = subprocess.run(
+        ["/bin/bash", str(validator), "collect"],
+        env=_collect_runtime_env(),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    placeholder = subprocess.run(
+        ["/bin/bash", str(validator), "collect"],
+        env=_collect_runtime_env(
+            sec_user_agent="AIResearchRadar/0.1 contact=you@example.com"
+        ),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    valid = subprocess.run(
+        ["/bin/bash", str(validator), "collect"],
+        env=_collect_runtime_env(
+            sec_user_agent="AIResearchRadar/0.1 contact=ops@radar.invalid"
+        ),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert missing.returncode == 1
+    assert "SEC_USER_AGENT" in missing.stderr
+    assert placeholder.returncode == 1
+    assert "placeholder" in placeholder.stderr
+    assert valid.returncode == 0

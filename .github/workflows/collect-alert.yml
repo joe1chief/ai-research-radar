@@ -21,6 +21,7 @@ env:
   APP_ENV: production
   APP_TIMEZONE: Asia/Shanghai
   RADAR_USER_AGENT: ${{ vars.RADAR_USER_AGENT }}
+  SEC_USER_AGENT: ${{ vars.SEC_USER_AGENT }}
   LLM_PROVIDER: ${{ vars.LLM_PROVIDER || 'dashscope' }}
   LLM_BASE_URL: ${{ vars.LLM_PROVIDER == 'yicloud' && 'https://token-api.yicloud.com/v1' || 'https://dashscope.aliyuncs.com/compatible-mode/v1' }}
   LLM_CLASSIFIER_MODEL: ${{ vars.LLM_PROVIDER == 'yicloud' && (vars.YICLOUD_CLASSIFIER_MODEL || 'required-yicloud-classifier-model') || (vars.DASHSCOPE_CLASSIFIER_MODEL || 'qwen-flash') }}

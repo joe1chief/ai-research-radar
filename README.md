@@ -121,6 +121,12 @@ local embeddings. Do not switch the provider until the manual
 `model-provider-smoke.yml` workflow passes. Exact rotation and rollback commands
 are in the [model provider runbook](docs/model-providers.md).
 
+Set the `SEC_USER_AGENT` repository variable to a dedicated product identity
+containing a monitored public operations email. It is used only for SEC
+requests; `RADAR_USER_AGENT` remains the general identity for every other
+collector. SEC traffic is throttled across its subdomains to four requests per
+second.
+
 Keep repository variables `DELIVERY_MODE=shadow` and `RADAR_DRY_RUN=true` for
 the 14-day backfill and three review days. After verifying generated Drafts and
 the public archive, switch both variables together to `live` and `false`.

@@ -150,6 +150,8 @@ sources:
     cadence: four_hour
     evidence_type: official_company
     parser: html_links
+    include_url_patterns:
+      - '^https://api-docs\.deepseek\.com/news(?:/|$)'
     enabled: true
   - id: huggingface-blog
     entity_id: huggingface
@@ -748,7 +750,9 @@ sources:
     exclude_title_patterns: ['^查看更多$|^晚点独家$']
     detail_fetch_limit: 0
     max_items: 40
-    enabled: true
+    # The origin currently serves an incomplete TLS certificate chain. Keep
+    # verification strict and re-enable only after the publisher fixes it.
+    enabled: false
   - id: reuters-ai-discovery
     entity_id: media_reuters
     group: capital

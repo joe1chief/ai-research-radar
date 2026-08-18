@@ -151,6 +151,14 @@ def main() -> int:
             continue
         text = path.read_text(encoding="utf-8")
         header = text.split("\njobs:", 1)[0]
+        if not re.search(
+            r"(?m)^  SEC_USER_AGENT:\s*\$\{\{ vars\.SEC_USER_AGENT \}\}$",
+            header,
+        ):
+            fail(
+                f"{filename}: missing dedicated SEC_USER_AGENT repository-variable mapping",
+                failures,
+            )
         mapping: dict[str, str] = {}
         for key in MODEL_ENV_KEYS:
             match = re.search(rf"(?m)^  {re.escape(key)}:\s*(.+)$", header)
@@ -252,6 +260,8 @@ def main() -> int:
             "LLM_EMBEDDING_MODE must be local for yicloud",
             "validate_boolean LLM_JSON_RESPONSE_FORMAT",
             "DASHSCOPE_API_KEY must be unset when LLM_PROVIDER=yicloud",
+            "validate_sec_identity",
+            "require_env SEC_USER_AGENT",
             "model)",
         ):
             if token not in runtime_text:

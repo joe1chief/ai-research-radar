@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     user_agent: str = Field(
         "AIResearchRadar/0.1 contact=you@example.com", alias="RADAR_USER_AGENT"
     )
+    sec_user_agent: str | None = Field(None, alias="SEC_USER_AGENT")
 
     llm_provider: Literal["dashscope", "yicloud"] = Field(
         "dashscope", alias="LLM_PROVIDER"

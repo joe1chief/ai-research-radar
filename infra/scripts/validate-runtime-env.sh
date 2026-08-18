@@ -31,6 +31,17 @@ validate_boolean() {
   fi
 }
 
+validate_sec_identity() {
+  require_env SEC_USER_AGENT
+  local value="${SEC_USER_AGENT:-}"
+  if [[ -n "$value" && "$value" != *"@"* ]]; then
+    invalid+=("SEC_USER_AGENT must include a monitored public contact email")
+  fi
+  if [[ "$value" == *"you@example.com"* || "$value" == *"<public-operations-email>"* ]]; then
+    invalid+=("SEC_USER_AGENT must not use the documented placeholder email")
+  fi
+}
+
 validate_model_provider() {
   local provider="${LLM_PROVIDER:-dashscope}"
   local api_key=""
@@ -128,6 +139,7 @@ case "$mode" in
   collect|digest)
     require_env RADAR_DATABASE_URL
     require_env RADAR_USER_AGENT
+    validate_sec_identity
     require_env SUPABASE_URL
     require_env SUPABASE_SECRET_KEY
     validate_model_provider

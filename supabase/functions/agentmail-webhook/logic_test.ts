@@ -2,6 +2,7 @@ import {
   deliveryStateForEvent,
   extractMessageId,
   parseAgentMailEvent,
+  resolveSupabaseSecretKey,
   verifySvixPayload,
 } from "./logic.ts";
 
@@ -33,6 +34,27 @@ Deno.test("uses payload event_id and falls back to svix id", () => {
     parseAgentMailEvent({ event_type: "domain.verified" }, "svix_2").eventId,
     "svix_2",
   );
+});
+
+Deno.test("uses the hosted default Supabase secret key", () => {
+  assertEquals(
+    resolveSupabaseSecretKey(JSON.stringify({ default: "sb_secret_hosted" }), "local_fallback"),
+    "sb_secret_hosted",
+  );
+});
+
+Deno.test("supports an explicit local Supabase secret without legacy fallback", () => {
+  assertEquals(resolveSupabaseSecretKey(undefined, "sb_secret_local"), "sb_secret_local");
+
+  for (const invalid of ["not-json", "{}", JSON.stringify({ default: "" })]) {
+    let rejected = false;
+    try {
+      resolveSupabaseSecretKey(invalid);
+    } catch {
+      rejected = true;
+    }
+    assertEquals(rejected, true);
+  }
 });
 
 function base64(bytes: Uint8Array): string {

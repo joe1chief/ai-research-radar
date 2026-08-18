@@ -39,6 +39,10 @@ def test_live_tech_fallback_sources_and_rss_caps_are_configured():
     assert by_id["xai-hf"].enabled is True
     assert by_id["xai-hf"].entity_id == "xai"
     assert "author=xai-org" in by_id["xai-hf"].url
+    assert by_id["deepseek-news"].include_url_patterns == [
+        r"^https://api-docs\.deepseek\.com/news(?:/|$)"
+    ]
+    assert by_id["latepost-discovery"].enabled is False
 
 
 def test_touch_high_seed_hits_all_five_technical_topics_and_company_claim():

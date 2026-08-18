@@ -19,6 +19,14 @@ storage even though the digest renders them under one top-level section.
 3. Reputable independent media.
 4. Community discussion and unattributed reporting.
 
+HTTP collection retries only timeouts, network failures, `429`, and `5xx`
+responses. Other `4xx` responses fail immediately so configuration or access
+denials are not multiplied. The top-level HTTP failure boundary stores only the
+configured source ID, response status, retryability, and hostname; it excludes
+response bodies, headers, paths, and query strings. SEC collectors use their
+own contact-bearing identity and a shared four-requests-per-second domain
+throttle.
+
 For capital events, level 3 and 4 sources are discovery-only. Price movement,
 broker commentary, routine monthly returns, and ordinary commits do not create
 events. The observation section requires two distinct configured media source
