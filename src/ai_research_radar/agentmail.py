@@ -225,7 +225,7 @@ def deliver_outbox(
                         )
                     else:
                         row.agentmail_draft_id = client.create_draft(
-                            client_id=row.delivery_key,
+                            client_id=_draft_client_id(row.delivery_key),
                             to=[recipient],
                             subject=str(message.get("subject", "AI Research Radar")),
                             text=str(message.get("text", "")),
@@ -279,7 +279,7 @@ def deliver_outbox(
                 )
             else:
                 draft_id = client.create_draft(
-                    client_id=row.delivery_key,
+                    client_id=_draft_client_id(row.delivery_key),
                     to=[recipient],
                     subject=subject,
                     text=str(message.get("text", "")),
@@ -515,6 +515,13 @@ def _apply_recorded_webhooks(session: Session, row: DeliveryModel) -> str:
 def _delivery_label(delivery_key: str) -> str:
     digest = hashlib.sha256(delivery_key.encode("utf-8")).hexdigest()[:24]
     return f"radar-delivery:{digest}"
+
+
+def _draft_client_id(delivery_key: str) -> str:
+    """Map an internal delivery key to AgentMail's restricted client-ID alphabet."""
+
+    digest = hashlib.sha256(delivery_key.encode("utf-8")).hexdigest()
+    return f"radar-{digest}"
 
 
 def _sdk_object(value: Any) -> dict[str, Any]:
