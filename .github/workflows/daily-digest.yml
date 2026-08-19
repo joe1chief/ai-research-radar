@@ -5,6 +5,12 @@ on:
     # 13:17 Asia/Shanghai; AgentMail schedules the draft for 13:45.
     - cron: "17 5 * * *"
   workflow_dispatch:
+    inputs:
+      delivery_only:
+        description: "Skip collection and enrichment; compose and validate delivery only"
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -58,11 +64,19 @@ jobs:
           else
             uv sync --all-extras
           fi
+      - name: Require shadow mode for delivery-only validation
+        if: github.event_name == 'workflow_dispatch' && inputs.delivery_only == true
+        env:
+          RADAR_DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
+          AGENTMAIL_API_KEY: ${{ secrets.AGENTMAIL_API_KEY }}
+          AGENTMAIL_INBOX_ID: ${{ secrets.AGENTMAIL_INBOX_ID }}
+          DIGEST_RECIPIENT: ${{ secrets.DIGEST_RECIPIENT }}
+        run: infra/scripts/validate-runtime-env.sh delivery-review
       - name: Reject unsupported model provider
-        if: env.LLM_PROVIDER != 'dashscope' && env.LLM_PROVIDER != 'yicloud'
+        if: env.LLM_PROVIDER != 'dashscope' && env.LLM_PROVIDER != 'yicloud' && (github.event_name != 'workflow_dispatch' || inputs.delivery_only != true)
         run: infra/scripts/validate-runtime-env.sh model
       - name: Validate DashScope collection environment
-        if: env.LLM_PROVIDER == 'dashscope'
+        if: env.LLM_PROVIDER == 'dashscope' && (github.event_name != 'workflow_dispatch' || inputs.delivery_only != true)
         env:
           RADAR_DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
           LLM_API_KEY: ${{ secrets.DASHSCOPE_API_KEY }}
@@ -70,7 +84,7 @@ jobs:
           SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
         run: infra/scripts/validate-runtime-env.sh digest
       - name: Validate YiCloud collection environment
-        if: env.LLM_PROVIDER == 'yicloud'
+        if: env.LLM_PROVIDER == 'yicloud' && (github.event_name != 'workflow_dispatch' || inputs.delivery_only != true)
         env:
           RADAR_DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
           LLM_API_KEY: ${{ secrets.YICLOUD_API_KEY }}
@@ -78,6 +92,7 @@ jobs:
           SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
         run: infra/scripts/validate-runtime-env.sh digest
       - name: Final incremental collection
+        if: github.event_name != 'workflow_dispatch' || inputs.delivery_only != true
         id: collect
         env:
           RADAR_DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
@@ -95,13 +110,13 @@ jobs:
           done
           echo "failed=$failed" >> "$GITHUB_OUTPUT"
       - name: Enrich and cluster with DashScope
-        if: env.LLM_PROVIDER == 'dashscope'
+        if: env.LLM_PROVIDER == 'dashscope' && (github.event_name != 'workflow_dispatch' || inputs.delivery_only != true)
         env:
           RADAR_DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
           LLM_API_KEY: ${{ secrets.DASHSCOPE_API_KEY }}
         run: uv run radar enrich
       - name: Enrich and cluster with YiCloud
-        if: env.LLM_PROVIDER == 'yicloud'
+        if: env.LLM_PROVIDER == 'yicloud' && (github.event_name != 'workflow_dispatch' || inputs.delivery_only != true)
         env:
           RADAR_DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
           LLM_API_KEY: ${{ secrets.YICLOUD_API_KEY }}
@@ -126,7 +141,7 @@ jobs:
           DIGEST_RECIPIENT: ${{ secrets.DIGEST_RECIPIENT }}
         run: uv run radar deliver
       - name: Report partial collection failure
-        if: always() && steps.collect.outputs.failed == '1'
+        if: always() && (github.event_name != 'workflow_dispatch' || inputs.delivery_only != true) && steps.collect.outputs.failed == '1'
         run: |
           echo "The digest was composed from available sources; at least one source group failed." >&2
           exit 1

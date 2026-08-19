@@ -75,6 +75,45 @@ STEP_ENV_CONTRACTS = {
     ),
 }
 
+DELIVERY_ONLY_GUARD = (
+    "github.event_name != 'workflow_dispatch' || inputs.delivery_only != true"
+)
+DELIVERY_ONLY_SKIP_CONDITIONS = {
+    "Reject unsupported model provider": (
+        "env.LLM_PROVIDER != 'dashscope' && env.LLM_PROVIDER != 'yicloud' && "
+        f"({DELIVERY_ONLY_GUARD})"
+    ),
+    "Validate DashScope collection environment": (
+        f"env.LLM_PROVIDER == 'dashscope' && ({DELIVERY_ONLY_GUARD})"
+    ),
+    "Validate YiCloud collection environment": (
+        f"env.LLM_PROVIDER == 'yicloud' && ({DELIVERY_ONLY_GUARD})"
+    ),
+    "Final incremental collection": DELIVERY_ONLY_GUARD,
+    "Enrich and cluster with DashScope": (
+        f"env.LLM_PROVIDER == 'dashscope' && ({DELIVERY_ONLY_GUARD})"
+    ),
+    "Enrich and cluster with YiCloud": (
+        f"env.LLM_PROVIDER == 'yicloud' && ({DELIVERY_ONLY_GUARD})"
+    ),
+}
+DELIVERY_ONLY_RUN_STEPS = (
+    "Compose today's digest",
+    "Validate delivery environment",
+    "Create or update the scheduled AgentMail draft",
+)
+DELIVERY_ONLY_RUN_COMMANDS = {
+    "Compose today's digest": "uv run radar compose",
+    "Validate delivery environment": "validate-runtime-env.sh delivery",
+    "Create or update the scheduled AgentMail draft": "uv run radar deliver",
+}
+DELIVERY_ONLY_REVIEW_ENV = (
+    "RADAR_DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}",
+    "AGENTMAIL_API_KEY: ${{ secrets.AGENTMAIL_API_KEY }}",
+    "AGENTMAIL_INBOX_ID: ${{ secrets.AGENTMAIL_INBOX_ID }}",
+    "DIGEST_RECIPIENT: ${{ secrets.DIGEST_RECIPIENT }}",
+)
+
 
 def fail(message: str, failures: list[str]) -> None:
     failures.append(message)
@@ -128,6 +167,187 @@ def validate_step_env_contracts(filename: str, text: str, failures: list[str]) -
                     )
 
 
+def workflow_named_step(text: str, name: str) -> str | None:
+    """Return one exact named step without allowing neighboring-step matches."""
+
+    for block in workflow_step_blocks(text):
+        match = re.search(r"(?m)^      - name:\s*(.+)$", block)
+        if match is not None and match.group(1).strip() == name:
+            return block
+    return None
+
+
+def workflow_named_step_index(text: str, name: str) -> int | None:
+    """Return a named step's ordinal position in the job."""
+
+    for index, block in enumerate(workflow_step_blocks(text)):
+        match = re.search(r"(?m)^      - name:\s*(.+)$", block)
+        if match is not None and match.group(1).strip() == name:
+            return index
+    return None
+
+
+def workflow_step_condition(block: str) -> str | None:
+    """Return a step's single-line GitHub Actions condition, if present."""
+
+    match = re.search(r"(?m)^        if:\s*(.+)$", block)
+    return match.group(1).strip() if match is not None else None
+
+
+def workflow_dispatch_input_mappings(text: str, input_name: str) -> list[str] | None:
+    """Extract scalar mappings for one workflow_dispatch input."""
+
+    header = text.split("\njobs:", 1)[0]
+    lines = header.splitlines()
+    try:
+        dispatch_index = lines.index("  workflow_dispatch:")
+    except ValueError:
+        return None
+
+    in_inputs = False
+    in_target = False
+    mappings: list[str] = []
+    for line in lines[dispatch_index + 1 :]:
+        if line.strip() and len(line) - len(line.lstrip()) <= 2:
+            break
+        if line == "    inputs:":
+            in_inputs = True
+            continue
+        if not in_inputs:
+            continue
+        if line == f"      {input_name}:":
+            in_target = True
+            continue
+        if not in_target:
+            continue
+        if line.strip() and len(line) - len(line.lstrip()) <= 6:
+            break
+        if re.match(r"^ {8}\S", line):
+            mappings.append(line.strip())
+    return mappings if in_target else None
+
+
+def validate_daily_digest_delivery_only(text: str, failures: list[str]) -> None:
+    """Keep the manual delivery-only escape hatch fail-closed and non-scheduled."""
+
+    mappings = workflow_dispatch_input_mappings(text, "delivery_only")
+    required_mappings = ("required: false", "default: false", "type: boolean")
+    if mappings is None:
+        fail("daily-digest.yml: missing workflow_dispatch delivery_only input", failures)
+    else:
+        for mapping in required_mappings:
+            if mappings.count(mapping) != 1:
+                fail(
+                    "daily-digest.yml: delivery_only input must contain exactly one "
+                    f"{mapping}",
+                    failures,
+                )
+
+    safety_step = workflow_named_step(
+        text, "Require shadow mode for delivery-only validation"
+    )
+    expected_safety_condition = (
+        "github.event_name == 'workflow_dispatch' && inputs.delivery_only == true"
+    )
+    if safety_step is None:
+        fail("daily-digest.yml: missing delivery_only shadow safety step", failures)
+    else:
+        if workflow_step_condition(safety_step) != expected_safety_condition:
+            fail(
+                "daily-digest.yml: delivery_only shadow safety step has an unsafe "
+                "condition",
+                failures,
+            )
+        if (
+            "run: infra/scripts/validate-runtime-env.sh delivery-review"
+            not in safety_step
+        ):
+            fail(
+                "daily-digest.yml: delivery_only safety step must run the "
+                "delivery-review validator",
+                failures,
+            )
+        safety_env = workflow_step_env(safety_step)
+        for mapping in DELIVERY_ONLY_REVIEW_ENV:
+            if mapping not in safety_env:
+                fail(
+                    "daily-digest.yml: delivery_only shadow safety step is missing "
+                    f"scoped env mapping {mapping}",
+                    failures,
+                )
+
+    for step_name, expected_condition in DELIVERY_ONLY_SKIP_CONDITIONS.items():
+        block = workflow_named_step(text, step_name)
+        if block is None:
+            fail(f"daily-digest.yml: missing step {step_name!r}", failures)
+            continue
+        condition = workflow_step_condition(block)
+        if condition != expected_condition:
+            fail(
+                f"daily-digest.yml: step {step_name!r} has an unsafe delivery_only "
+                "condition",
+                failures,
+            )
+
+    safety_index = workflow_named_step_index(
+        text, "Require shadow mode for delivery-only validation"
+    )
+    for step_name in DELIVERY_ONLY_RUN_STEPS:
+        block = workflow_named_step(text, step_name)
+        if block is None:
+            fail(f"daily-digest.yml: missing step {step_name!r}", failures)
+            continue
+        if workflow_step_condition(block) is not None:
+            fail(
+                f"daily-digest.yml: step {step_name!r} must remain active during "
+                "delivery_only runs",
+                failures,
+            )
+        required_command = DELIVERY_ONLY_RUN_COMMANDS[step_name]
+        if required_command not in block:
+            fail(
+                f"daily-digest.yml: step {step_name!r} must run {required_command}",
+                failures,
+            )
+        step_index = workflow_named_step_index(text, step_name)
+        if (
+            safety_index is not None
+            and step_index is not None
+            and safety_index >= step_index
+        ):
+            fail(
+                "daily-digest.yml: delivery_only shadow safety step must run before "
+                f"{step_name!r}",
+                failures,
+            )
+
+    report = workflow_named_step(text, "Report partial collection failure")
+    report_condition = workflow_step_condition(report) if report is not None else None
+    expected_report_condition = (
+        f"always() && ({DELIVERY_ONLY_GUARD}) && "
+        "steps.collect.outputs.failed == '1'"
+    )
+    if report_condition != expected_report_condition:
+        fail(
+            "daily-digest.yml: partial-failure reporting must ignore a deliberately "
+            "skipped delivery_only collection",
+            failures,
+        )
+
+    expected_mode_mappings = {
+        "DELIVERY_MODE": "  DELIVERY_MODE: ${{ vars.DELIVERY_MODE || 'shadow' }}",
+        "RADAR_DRY_RUN": "  RADAR_DRY_RUN: ${{ vars.RADAR_DRY_RUN || 'true' }}",
+    }
+    for key, expected_mapping in expected_mode_mappings.items():
+        mappings_for_key = re.findall(rf"(?m)^\s*{key}:.*$", text)
+        if mappings_for_key != [expected_mapping]:
+            fail(
+                f"daily-digest.yml: {key} must keep its single safe repository-variable "
+                "mapping and cannot be overridden by delivery_only",
+                failures,
+            )
+
+
 def main() -> int:
     failures: list[str] = []
     workflows = ROOT / ".github" / "workflows"
@@ -143,6 +363,12 @@ def main() -> int:
         for token in ("workflow_dispatch:", "concurrency:", "cancel-in-progress:"):
             if token not in text:
                 fail(f"{filename}: missing {token}", failures)
+
+    daily_digest = workflows / "daily-digest.yml"
+    if daily_digest.is_file():
+        validate_daily_digest_delivery_only(
+            daily_digest.read_text(encoding="utf-8"), failures
+        )
 
     model_mappings: dict[str, dict[str, str]] = {}
     for filename in MODEL_WORKFLOWS:
@@ -262,6 +488,9 @@ def main() -> int:
             "DASHSCOPE_API_KEY must be unset when LLM_PROVIDER=yicloud",
             "validate_sec_identity",
             "require_env SEC_USER_AGENT",
+            "delivery-review)",
+            "DELIVERY_MODE must be shadow for delivery-review",
+            "RADAR_DRY_RUN must be true for delivery-review",
             "model)",
         ):
             if token not in runtime_text:
