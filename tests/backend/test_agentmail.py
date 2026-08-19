@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import re
 from datetime import timedelta
 
-from ai_research_radar.agentmail import deliver_outbox, reconcile_drafts
+from ai_research_radar.agentmail import _draft_client_id, deliver_outbox, reconcile_drafts
 from ai_research_radar.db import DeliveryModel, WebhookEventModel, utcnow
 
 
@@ -71,6 +72,8 @@ def test_shadow_with_credentials_creates_review_draft_but_never_sends(session):
     assert result["shadow"] == 1
     assert delivery.state == "draft"
     assert delivery.agentmail_draft_id == "draft-1"
+    assert client.created[0]["client_id"] == _draft_client_id(delivery.delivery_key)
+    assert re.fullmatch(r"[A-Za-z0-9._~-]+", client.created[0]["client_id"])
     assert client.created[0]["send_at"] is None
     assert client.created[0]["labels"][0].startswith("radar-delivery:")
     assert not client.sent
@@ -90,11 +93,57 @@ def test_live_mode_schedules_future_draft_once(session):
     assert result["scheduled"] == 1
     assert delivery.state == "scheduled"
     assert delivery.agentmail_draft_id == "draft-1"
-    assert client.created[0]["client_id"] == delivery.delivery_key
+    assert client.created[0]["client_id"] == _draft_client_id(delivery.delivery_key)
+    assert re.fullmatch(r"[A-Za-z0-9._~-]+", client.created[0]["client_id"])
     assert client.created[0]["labels"][0].startswith("radar-delivery:")
     # A second run cannot recreate or send the draft.
     deliver_outbox(session, mode="live", recipient="reader@example.com", client=client)
     assert len(client.created) == 1
+
+
+def test_draft_client_id_is_stable_unique_and_agentmail_safe():
+    delivery_key = "digest:x:2026-07-12"
+    client_id = _draft_client_id(delivery_key)
+
+    assert client_id == (
+        "radar-96613a86c991e38ef378504a9627350a"
+        "6932b97196389c6738968df05c79c3af"
+    )
+    assert client_id == _draft_client_id(delivery_key)
+    assert client_id != _draft_client_id("digest:x:2026-07-13")
+    assert len(client_id) == 70
+    assert client_id.startswith("radar-")
+    assert ":" not in client_id
+    assert re.fullmatch(r"[A-Za-z0-9._~-]+", client_id)
+
+
+def test_existing_draft_update_does_not_replace_client_id_or_label(session):
+    delivery = row("digest:x:existing", send_at=utcnow() + timedelta(hours=1))
+    delivery.agentmail_draft_id = "draft-existing"
+    session.add(delivery)
+    session.flush()
+    client = FakeDraftClient()
+
+    result = deliver_outbox(
+        session,
+        mode="live",
+        recipient="reader@example.com",
+        client=client,
+    )
+
+    assert result["scheduled"] == 1
+    assert client.created == [
+        {
+            "updated_draft_id": "draft-existing",
+            "to": ["reader@example.com"],
+            "subject": "Radar",
+            "text": "text",
+            "html": "<p>text</p>",
+            "send_at": delivery.send_at,
+        }
+    ]
+    assert "client_id" not in client.created[0]
+    assert delivery.metadata_json["agentmail_label"].startswith("radar-delivery:")
 
 
 def test_live_mode_sends_due_alert(session):
