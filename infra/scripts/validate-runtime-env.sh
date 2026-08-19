@@ -144,6 +144,18 @@ case "$mode" in
     require_env SUPABASE_SECRET_KEY
     validate_model_provider
     ;;
+  delivery-review)
+    require_env RADAR_DATABASE_URL
+    require_env AGENTMAIL_API_KEY
+    require_env AGENTMAIL_INBOX_ID
+    require_env DIGEST_RECIPIENT
+    if [[ "${DELIVERY_MODE:-shadow}" != "shadow" ]]; then
+      invalid+=("DELIVERY_MODE must be shadow for delivery-review")
+    fi
+    if [[ "${RADAR_DRY_RUN:-true}" != "true" ]]; then
+      invalid+=("RADAR_DRY_RUN must be true for delivery-review")
+    fi
+    ;;
   delivery)
     require_env RADAR_DATABASE_URL
     if [[ "${DELIVERY_MODE:-shadow}" == "live" ]]; then

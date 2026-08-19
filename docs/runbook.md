@@ -25,6 +25,16 @@ variables. Recipient addresses are secrets, not variables.
 3. Set `DELIVERY_MODE=live`, manually run `daily-digest`, and verify the webhook
    reaches `delivered`.
 
+To validate AgentMail independently of a slow collection bootstrap, manually
+dispatch `Daily Digest` with `delivery_only=true` while `DELIVERY_MODE=shadow`
+and `RADAR_DRY_RUN=true`. This opt-in path skips model validation, collection,
+and enrichment, then composes from the current database and creates or updates
+the review Draft. Confirm the Draft has no `send_at` and the run reports zero
+scheduled, sent, and failed deliveries. Scheduled runs and manual runs with the
+default `delivery_only=false` always retain the full collection pipeline; this
+mode refuses to run under live/non-dry-run settings and is not a substitute for
+fixing or completing a failed paper sweep.
+
 `radar backfill` clears stored HTTP validators and source watermarks only for
 the explicit replay, then rebuilds them. It commits usable archive records but
 exits non-zero if any source fails, degrades, or reaches a pagination budget;
