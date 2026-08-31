@@ -78,7 +78,10 @@ const SECTION_IDS: TopicId[] = [
 
 function isInSection(event: RadarEvent, topicId: TopicId) {
   if (topicId === 'safety_governance') {
-    return event.topics.includes('safety_governance') || event.topics.includes('mechanistic_interpretability')
+    return (
+      event.topics.includes('safety_governance') ||
+      event.topics.includes('mechanistic_interpretability')
+    )
   }
   return event.topics.includes(topicId)
 }
@@ -143,20 +146,20 @@ function setFilter<K extends keyof FilterState>(
   setter((current) => ({ ...current, [key]: value }))
 }
 
-function Score({ value }: { value: number }) {
+function DisruptScore({ value }: { value: number }) {
   const band = scoreBand(value)
   return (
-    <div className={`score score--${band}`} aria-label={`信号分数 ${value} 分`}>
-      <strong>{value}</strong>
-      <span>signal</span>
+    <div className={`tc-score-badge tc-score-badge--${band}`} aria-label={`破坏性分值 ${value} 分`}>
+      <span>⚡ {value}</span>
+      <span>SCORE</span>
     </div>
   )
 }
 
 function EvidencePill({ event }: { event: RadarEvent }) {
   return (
-    <span className={`evidence evidence--${event.verification_status}`}>
-      <span aria-hidden="true" className="evidence__dot" />
+    <span className="tc-evidence-pill">
+      <span aria-hidden="true" className="tc-evidence-dot" />
       {VERIFICATION_LABELS[event.verification_status]}
     </span>
   )
@@ -181,10 +184,10 @@ function EventLinks({ event }: { event: RadarEvent }) {
   ]
 
   return (
-    <div className="card__links" aria-label="事件来源链接">
+    <div className="tc-card__links" aria-label="事件来源链接">
       {links.map((link) => (
         <a
-          className={link.primary ? 'source-link source-link--primary' : 'source-link'}
+          className={link.primary ? 'tc-source-link tc-source-link--primary' : 'tc-source-link'}
           href={link.url}
           key={`${link.label}-${link.url}`}
           target="_blank"
@@ -198,307 +201,218 @@ function EventLinks({ event }: { event: RadarEvent }) {
   )
 }
 
+function LeadStoryCard({ event }: { event: RadarEvent }) {
+  const mainTopic = TOPICS[event.topics[0]]
+  const entityName = event.entities[0]?.name ?? 'Frontier Lab'
+  return (
+    <article className="lead-story-card">
+      <div>
+        <div className="lead-eyebrow">
+          <span>{mainTopic.eyebrow} // LEAD STORY</span>
+          <span>•</span>
+          <span>{EVENT_TYPE_LABELS[event.event_type] ?? event.event_type}</span>
+        </div>
+
+        <h3 className="lead-title">{event.title_zh}</h3>
+        <p className="lead-summary">{event.summary_zh}</p>
+
+        {event.why_it_matters && (
+          <div className="crunch-analysis-box">
+            <span className="crunch-analysis-kicker">⚡ CRUNCH ANALYSIS // 核心研判价值</span>
+            <p className="crunch-analysis-text">{event.why_it_matters}</p>
+          </div>
+        )}
+
+        {event.deep_read?.summary && (
+          <div className="tc-deep-read-box">
+            <span className="insight-label">📖 alphaXiv 深度精读</span>
+            <p>{event.deep_read.summary}</p>
+          </div>
+        )}
+      </div>
+
+      <div>
+        <div className="lead-byline-bar">
+          <div className="byline-meta-info">
+            <span>By <strong className="byline-author">{entityName}</strong></span>
+            <span>•</span>
+            <span>{formatDate(event.published_at)}</span>
+            <span>•</span>
+            <EvidencePill event={event} />
+          </div>
+          <div className="disrupt-badge">
+            <span>DISRUPT INDEX:</span>
+            <span>{event.score} PTS</span>
+          </div>
+        </div>
+
+        <div style={{ marginTop: '14px' }}>
+          <EventLinks event={event} />
+        </div>
+      </div>
+    </article>
+  )
+}
+
+function HeadlineCardItem({ event, rank }: { event: RadarEvent; rank: string }) {
+  const mainTopic = TOPICS[event.topics[0]]
+  const entityName = event.entities[0]?.name ?? 'Lab'
+  return (
+    <div className="headline-card-item">
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+        <span className="headline-card-item__rank">{rank} // {mainTopic.short}</span>
+        <DisruptScore value={event.score} />
+      </div>
+      <h4 className="headline-card-item__title">{event.title_zh}</h4>
+      <p className="headline-card-item__summary">{event.summary_zh}</p>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '11.5px', color: 'var(--tc-text-muted)' }}>
+        <span>By {entityName} • {formatDate(event.published_at)}</span>
+        <a
+          className="tc-source-link tc-source-link--primary"
+          style={{ padding: '4px 10px', fontSize: '11px' }}
+          href={event.primary_url}
+          target="_blank"
+          rel="noreferrer"
+        >
+          查看 ↗
+        </a>
+      </div>
+    </div>
+  )
+}
+
+function HeroMiniCard({ event }: { event: RadarEvent }) {
+  const mainTopic = TOPICS[event.topics[0]]
+  const entityName = event.entities[0]?.name ?? 'Lab'
+  return (
+    <div className="hero-mini-card">
+      <div>
+        <div className="hero-mini-card__eyebrow">
+          {mainTopic.eyebrow} · {EVENT_TYPE_LABELS[event.event_type] ?? event.event_type}
+        </div>
+        <h4 className="hero-mini-card__title">{event.title_zh}</h4>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '11px', color: 'var(--tc-text-muted)', paddingTop: '8px', borderTop: '1px solid var(--tc-border-light)' }}>
+        <span>By {entityName}</span>
+        <DisruptScore value={event.score} />
+      </div>
+    </div>
+  )
+}
+
 function EventCard({ event, compact = false }: { event: RadarEvent; compact?: boolean }) {
   const mainTopic = TOPICS[event.topics[0]]
+  const entityName = event.entities[0]?.name ?? 'Frontier Lab'
   return (
-    <article className={`event-card${compact ? ' event-card--compact' : ''}`}>
-      <div className="card__rail" aria-hidden="true" />
-      <header className="card__header">
-        <div className="card__meta">
-          <span className="type-label">{EVENT_TYPE_LABELS[event.event_type] ?? event.event_type}</span>
-          <span>{mainTopic.short}</span>
-          <span>{formatDate(event.published_at)}</span>
+    <article className={`tc-card${compact ? ' tc-card--compact' : ''}`} id={event.event_id}>
+      <header className="tc-card__header">
+        <div className="tc-card__kicker-strip">
+          <span className="tc-tag-kicker">{mainTopic.eyebrow}</span>
+          <span>•</span>
+          <span className="tc-entity-kicker">
+            {EVENT_TYPE_LABELS[event.event_type] ?? event.event_type}
+          </span>
+          <span>•</span>
+          <span className="tc-date-kicker">{formatDate(event.published_at)}</span>
         </div>
-        <Score value={event.score} />
+        <DisruptScore value={event.score} />
       </header>
 
-      <h3>{event.title_zh}</h3>
-      <p className="card__summary">{event.summary_zh}</p>
+      <h3 className="tc-card__title">{event.title_zh}</h3>
+      <p className="tc-card__summary">{event.summary_zh}</p>
+
+      {event.why_it_matters && (
+        <div className="crunch-analysis-box">
+          <span className="crunch-analysis-kicker">⚡ 核心研判 (Why it matters):</span>
+          <p className="crunch-analysis-text">{event.why_it_matters}</p>
+        </div>
+      )}
 
       {!compact && event.deep_read?.summary && (
-        <div className="card__deep-read">
-          <span className="insight-label">alphaXiv 深读</span>
+        <div className="tc-deep-read-box">
+          <span className="insight-label">📖 alphaXiv 深度精读</span>
           <p>{event.deep_read.summary}</p>
         </div>
       )}
 
-      {!compact && (
-        <div className="card__insight-grid">
-          <div>
-            <span className="insight-label">为什么归入该主题</span>
-            <p>{event.topics.map((topic) => TOPICS[topic].short).join(' · ')}</p>
-          </div>
-          <div>
-            <span className="insight-label">为什么重要</span>
-            <p>{event.why_it_matters}</p>
-          </div>
-          <div>
-            <span className="insight-label">与上次相比</span>
-            <p>{event.change_summary}</p>
-          </div>
-        </div>
-      )}
-
-      <div className="card__proof">
+      <div className="tc-proof-strip">
+        <span>By <strong style={{ color: 'var(--tc-black)' }}>{entityName}</strong></span>
+        <span>•</span>
         <EvidencePill event={event} />
+        <span>•</span>
         <span>{EVIDENCE_LABELS[event.evidence_type]}</span>
+        <span>•</span>
         <span>{STATUS_LABELS[event.status]}</span>
+        {event.material_updated_at && (
+          <>
+            <span>•</span>
+            <span>实质更新 {formatDate(event.material_updated_at)}</span>
+          </>
+        )}
       </div>
 
-      <div className="tag-row" aria-label="标签">
-        {event.entities.slice(0, 2).map((entity) => (
-          <span className="tag tag--entity" key={entity.id}>
-            {entity.name}
+      <div className="tc-tag-row" aria-label="标签">
+        {event.entities.slice(0, 3).map((entity) => (
+          <span className="tc-tag tc-tag--entity" key={entity.id}>
+            @{entity.name}
           </span>
         ))}
         {event.tags.slice(0, compact ? 2 : 4).map((tag) => (
-          <span className="tag" key={tag}>
-            {tag}
+          <span className="tc-tag" key={tag}>
+            #{tag}
           </span>
         ))}
       </div>
-
-      {!compact && (
-        <div className="card__timestamps">
-          <span>事件时间 {formatDate(event.source_time)}</span>
-          <span>首次发现 {formatDate(event.first_seen_at)}</span>
-          {event.material_updated_at && <span>实质更新 {formatDate(event.material_updated_at)}</span>}
-        </div>
-      )}
 
       <EventLinks event={event} />
 
       {!compact && event.timeline.length > 0 && (
-        <details className="timeline">
-          <summary>查看事件时间线 · {event.timeline.length} 个节点</summary>
-          <ol>
+        <details className="tc-timeline-accordion">
+          <summary>查看事件演进脉络 · {event.timeline.length} 个节点</summary>
+          <ul className="tc-timeline-list">
             {event.timeline.map((entry) => (
-              <li key={`${entry.at}-${entry.label}`}>
-                <span className={`timeline__marker timeline__marker--${entry.kind}`} />
-                <time>{formatDate(entry.at)}</time>
-                <div>
+              <li className="tc-timeline-item" key={`${entry.at}-${entry.label}`}>
+                <time className="tc-timeline-time">{formatDate(entry.at)}</time>
+                <div className="tc-timeline-body">
                   <strong>{entry.label}</strong>
                   <p>{entry.detail}</p>
                 </div>
               </li>
             ))}
-          </ol>
+          </ul>
         </details>
       )}
     </article>
   )
 }
 
-function FilterPanel({
-  filters,
-  setFilters,
-  dataset,
-  months,
-  archiveMonth,
-  onArchiveMonth,
-}: {
-  filters: FilterState
-  setFilters: React.Dispatch<React.SetStateAction<FilterState>>
-  dataset: PublicDataset
-  months: MonthIndex['months']
-  archiveMonth: string
-  onArchiveMonth: (month: string) => void
-}) {
-  const companies = useMemo(() => {
-    const map = new Map<string, string>()
-    dataset.events.forEach((event) =>
-      event.entities.forEach((entity) => map.set(entity.id, entity.name)),
-    )
-    return [...map.entries()].sort((a, b) => a[1].localeCompare(b[1], 'zh-CN'))
-  }, [dataset.events])
-  const eventTypes = [...new Set(dataset.events.map((event) => event.event_type))].sort()
-
-  return (
-    <aside className="filter-panel" aria-label="筛选雷达事件">
-      <div className="filter-panel__heading">
-        <div>
-          <span className="section-kicker">SIGNAL CONTROL</span>
-          <h2>筛选信号</h2>
-        </div>
-        <button className="text-button" onClick={() => setFilters(DEFAULT_FILTERS)} type="button">
-          清除
-        </button>
-      </div>
-
-      <label className="search-field">
-        <span>全文检索</span>
-        <div>
-          <span aria-hidden="true">⌕</span>
-          <input
-            type="search"
-            value={filters.q}
-            onChange={(event) => setFilter(setFilters, 'q', event.target.value)}
-            placeholder="论文、公司、技术标签…"
-          />
-        </div>
-      </label>
-
-      <div className="filter-grid">
-        <label>
-          <span>归档切片</span>
-          <select value={archiveMonth} onChange={(event) => onArchiveMonth(event.target.value)}>
-            <option value="latest">最近 30 天</option>
-            {months.map((entry) => (
-              <option key={entry.month} value={entry.month}>
-                {entry.month} · {entry.count} 条
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label>
-          <span>日期范围</span>
-          <select
-            value={filters.range}
-            onChange={(event) =>
-              setFilter(setFilters, 'range', event.target.value as FilterState['range'])
-            }
-          >
-            <option value="all">当前切片全部</option>
-            <option value="24h">最近 24 小时</option>
-            <option value="7d">最近 7 天</option>
-            <option value="30d">最近 30 天</option>
-          </select>
-        </label>
-
-        <label>
-          <span>主题</span>
-          <select
-            value={filters.topic}
-            onChange={(event) =>
-              setFilter(setFilters, 'topic', event.target.value as FilterState['topic'])
-            }
-          >
-            <option value="all">全部主题</option>
-            {Object.entries(TOPICS).map(([id, topic]) => (
-              <option key={id} value={id}>
-                {topic.short}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label>
-          <span>公司 / 组织</span>
-          <select
-            value={filters.company}
-            onChange={(event) => setFilter(setFilters, 'company', event.target.value)}
-          >
-            <option value="all">全部实体</option>
-            {companies.map(([id, name]) => (
-              <option key={id} value={id}>
-                {name}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label>
-          <span>事件类型</span>
-          <select
-            value={filters.eventType}
-            onChange={(event) => setFilter(setFilters, 'eventType', event.target.value)}
-          >
-            <option value="all">全部类型</option>
-            {eventTypes.map((type) => (
-              <option key={type} value={type}>
-                {EVENT_TYPE_LABELS[type] ?? type}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label>
-          <span>证据</span>
-          <select
-            value={filters.evidence}
-            onChange={(event) =>
-              setFilter(setFilters, 'evidence', event.target.value as FilterState['evidence'])
-            }
-          >
-            <option value="all">全部证据</option>
-            {Object.entries(EVIDENCE_LABELS).map(([id, label]) => (
-              <option key={id} value={id}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label>
-          <span>验证等级</span>
-          <select
-            value={filters.verification}
-            onChange={(event) =>
-              setFilter(
-                setFilters,
-                'verification',
-                event.target.value as FilterState['verification'],
-              )
-            }
-          >
-            <option value="all">全部等级</option>
-            {Object.entries(VERIFICATION_LABELS).map(([id, label]) => (
-              <option key={id} value={id}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label>
-          <span>状态</span>
-          <select
-            value={filters.status}
-            onChange={(event) =>
-              setFilter(setFilters, 'status', event.target.value as FilterState['status'])
-            }
-          >
-            <option value="all">全部状态</option>
-            {Object.entries(STATUS_LABELS).map(([id, label]) => (
-              <option key={id} value={id}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
-
-      <fieldset className="score-filter">
-        <legend>最低信号分</legend>
-        {[0, 45, 65, 80].map((score) => (
-          <label key={score}>
-            <input
-              checked={filters.minScore === score}
-              name="minimum-score"
-              onChange={() => setFilter(setFilters, 'minScore', score)}
-              type="radio"
-            />
-            <span>{score === 0 ? '全部' : `${score}+`}</span>
-          </label>
-        ))}
-      </fieldset>
-
-      <div className="legend">
-        <span><i className="legend__dot legend__dot--alert" />80+ 预警</span>
-        <span><i className="legend__dot legend__dot--focus" />65+ 重点</span>
-        <span><i className="legend__dot legend__dot--standard" />45+ 常规</span>
-      </div>
-    </aside>
-  )
-}
-
 function LoadingState() {
   return (
     <main className="state-page" aria-live="polite">
-      <div className="radar-spinner" aria-hidden="true"><span /></div>
-      <span className="section-kicker">SYNCHRONIZING</span>
-      <h1>正在校准公开信号…</h1>
+      <div className="tc-spinner" aria-hidden="true" />
+      <span
+        style={{
+          fontFamily: 'var(--font-tc-mono)',
+          fontSize: '11px',
+          fontWeight: 800,
+          color: 'var(--tc-green-dark)',
+          letterSpacing: '0.1em',
+          textTransform: 'uppercase',
+        }}
+      >
+        TECHCRUNCH // REALTIME SIGNAL ENGINE
+      </span>
+      <h1
+        style={{
+          fontFamily: 'var(--font-tc-headline)',
+          fontSize: '26px',
+          fontWeight: 900,
+          marginTop: '8px',
+          color: 'var(--tc-black)',
+        }}
+      >
+        正在同步前沿 AI 研发与资本公开情报…
+      </h1>
     </main>
   )
 }
@@ -534,7 +448,9 @@ function App() {
         setError(reason instanceof Error ? reason.message : '未知错误')
       })
     fetch(`${import.meta.env.BASE_URL}data/months/index.json`, { signal: controller.signal })
-      .then((response) => (response.ok ? response.json() : Promise.reject(new Error('month index'))))
+      .then((response) =>
+        response.ok ? response.json() : Promise.reject(new Error('month index')),
+      )
       .then((value: MonthIndex) => {
         const valid = (value.months ?? []).filter((entry) => /^\d{4}-\d{2}$/.test(entry.month))
         setMonths(valid)
@@ -598,11 +514,28 @@ function App() {
   const events = useMemo(() => {
     if (!dataset) return []
     const q = filters.q.trim()
-    const ids = q && searchIndex
-      ? new Set(searchIndex.search(q).map((result) => String(result.id)))
-      : undefined
+    const ids =
+      q && searchIndex
+        ? new Set(searchIndex.search(q).map((result) => String(result.id)))
+        : undefined
     return filterEvents(dataset.events, filters, dataset.generated_at, ids)
   }, [dataset, filters, searchIndex])
+
+  const topLabs = useMemo(() => {
+    if (!dataset) return []
+    const map = new Map<string, { id: string; name: string; count: number }>()
+    dataset.events.forEach((event) =>
+      event.entities.forEach((entity) => {
+        const prev = map.get(entity.id)
+        if (prev) {
+          prev.count += 1
+        } else {
+          map.set(entity.id, { id: entity.id, name: entity.name, count: 1 })
+        }
+      }),
+    )
+    return [...map.values()].sort((a, b) => b.count - a.count)
+  }, [dataset])
 
   const share = async () => {
     try {
@@ -622,132 +555,249 @@ function App() {
   if (error) {
     return (
       <main className="state-page">
-        <span className="state-icon" aria-hidden="true">!</span>
-        <span className="section-kicker">DATA UNAVAILABLE</span>
-        <h1>公开归档暂时无法读取</h1>
-        <p>请确认 <code>data/latest.json</code> 已生成且通过脱敏检查。</p>
-        <small>{error}</small>
+        <span style={{ fontSize: '36px', color: 'var(--tc-alert-red)', marginBottom: '8px' }}>
+          ⚠️
+        </span>
+        <span
+          style={{
+            fontFamily: 'var(--font-tc-mono)',
+            fontSize: '11px',
+            fontWeight: 800,
+            color: 'var(--tc-alert-red)',
+            textTransform: 'uppercase',
+          }}
+        >
+          DATA DISRUPTED // 数据源读取异常
+        </span>
+        <h1
+          style={{
+            fontFamily: 'var(--font-tc-headline)',
+            fontSize: '26px',
+            fontWeight: 900,
+            marginTop: '8px',
+            color: 'var(--tc-black)',
+          }}
+        >
+          公开科研情报归档暂时无法读取
+        </h1>
+        <p style={{ color: 'var(--tc-text-muted)', fontSize: '14px' }}>
+          请确认 <code>data/latest.json</code> 已生成且通过脱敏检查。
+        </p>
+        <small style={{ fontFamily: 'var(--font-tc-mono)', color: 'var(--tc-text-subtle)' }}>
+          {error}
+        </small>
       </main>
     )
   }
+
   if (!dataset) return <LoadingState />
 
   const topThree = events.slice(0, 3)
+  const heroBottomThree = events.slice(3, 6)
   const isDatasetEmpty = dataset.events.length === 0
   const isFiltered = filtersToSearch(filters) !== '' || archiveMonth !== 'latest'
-  const visibleSectionIds: TopicId[] = filters.topic === 'all'
-    ? SECTION_IDS
-    : [filters.topic === 'mechanistic_interpretability' ? 'safety_governance' : filters.topic]
+  const visibleSectionIds: TopicId[] =
+    filters.topic === 'all'
+      ? SECTION_IDS
+      : [filters.topic === 'mechanistic_interpretability' ? 'safety_governance' : filters.topic]
 
   return (
     <div className="app-shell">
+      {/* ================= CRUNCH WIRE TICKER ================= */}
+      <div className="crunch-wire">
+        <div className="crunch-wire__left">
+          <span className="crunch-wire__badge">
+            <span className="pulse-dot" />
+            CRUNCH WIRE
+          </span>
+          <span>上海时间 · {formatDate(dataset.generated_at)}</span>
+          <span>•</span>
+          <span style={{ color: 'var(--tc-green)' }}>29 信源全时校验</span>
+          <span>•</span>
+          <span>归档切片: {archiveMonth === 'latest' ? '最近 30 天' : archiveMonth}</span>
+        </div>
+        <div className="crunch-wire__right">
+          <span>公开科研事件: {dataset.events.length} 条</span>
+        </div>
+      </div>
+
+      {/* ================= TECHCRUNCH SITE HEADER ================= */}
       <header className="site-header">
-        <a className="brand" href={import.meta.env.BASE_URL} aria-label="AI Research Radar 首页">
-          <span className="brand__mark" aria-hidden="true"><i /><i /><i /></span>
-          <span>
-            <strong>AI Research Radar</strong>
-            <small>PUBLIC INTELLIGENCE ARCHIVE</small>
-          </span>
-        </a>
-        <div className="header__actions">
-          <span className="live-status">
-            <i /> {dataset.source_health.last_success_at ? '数据已同步' : '等待首次成功采集'}
-          </span>
-          <button className="share-button" type="button" onClick={share}>
-            {copied ? '链接已复制' : '分享当前视图'}
-            <span aria-hidden="true">↗</span>
-          </button>
+        <div className="header-main">
+          <a className="brand" href={import.meta.env.BASE_URL} aria-label="AI Research Radar 首页">
+            <div className="brand__tc-box" aria-hidden="true">
+              TC
+            </div>
+            <div className="brand__wordmark">
+              <div className="brand__name">
+                Tech<span>Radar</span>
+              </div>
+              <span className="brand__sub">Public AI Intelligence</span>
+            </div>
+          </a>
+
+          <nav className="header-nav" aria-label="头部导航分类">
+            <button
+              type="button"
+              className={`nav-link${filters.topic === 'all' ? ' nav-link--active' : ''}`}
+              onClick={() => setFilter(setFilters, 'topic', 'all')}
+            >
+              Latest
+            </button>
+            {SECTION_IDS.map((topicId) => {
+              const topic = TOPICS[topicId]
+              const isActive =
+                filters.topic === topicId ||
+                (topicId === 'safety_governance' && filters.topic === 'mechanistic_interpretability')
+              return (
+                <button
+                  key={topicId}
+                  type="button"
+                  className={`nav-link${isActive ? ' nav-link--active' : ''}`}
+                  onClick={() => setFilter(setFilters, 'topic', topicId)}
+                >
+                  {topic.short}
+                </button>
+              )
+            })}
+          </nav>
+
+          <div className="header__actions">
+            <span className="live-health-pill">
+              <span className="green-live-dot" />
+              {dataset.source_health.healthy} 信源已核验
+            </span>
+            <button className="tc-button-primary" type="button" onClick={share}>
+              {copied ? '✓ 链接已复制' : '分享雷达 ↗'}
+            </button>
+          </div>
+        </div>
+
+        {/* Secondary Category Strip */}
+        <div className="category-strip">
+          <div className="category-strip__inner">
+            <button
+              type="button"
+              className={`cat-pill${filters.topic === 'all' ? ' cat-pill--active' : ''}`}
+              onClick={() => setFilter(setFilters, 'topic', 'all')}
+            >
+              全部信号 <span className="cat-count">{dataset.events.length}</span>
+            </button>
+            {SECTION_IDS.map((topicId) => {
+              const topic = TOPICS[topicId]
+              const topicEventsCount = dataset.events.filter((event) =>
+                isInSection(event, topicId),
+              ).length
+              const isActive =
+                filters.topic === topicId ||
+                (topicId === 'safety_governance' &&
+                  filters.topic === 'mechanistic_interpretability')
+              return (
+                <button
+                  key={topicId}
+                  type="button"
+                  className={`cat-pill${isActive ? ' cat-pill--active' : ''}`}
+                  onClick={() => setFilter(setFilters, 'topic', topicId)}
+                >
+                  {topic.index} {topic.short}
+                  <span className="cat-count">{topicEventsCount}</span>
+                </button>
+              )
+            })}
+          </div>
         </div>
       </header>
 
       {dataset.demo_mode && (
         <div className="demo-banner" role="note">
-          <span>示例模式</span>
-          当前展示公开脱敏样例；生产导出会自动替换，且不会包含邮箱、原文、Prompt 或投递状态。
+          <span
+            style={{
+              padding: '1px 6px',
+              background: '#92400e',
+              color: '#ffffff',
+              borderRadius: '3px',
+              fontFamily: 'var(--font-tc-mono)',
+              fontSize: '10px',
+              fontWeight: 800,
+            }}
+          >
+            DEMO MODE
+          </span>
+          当前展示公开脱敏样例；生产导出将自动替换，且不包含内部 Prompt、原文或私有投递状态。
         </div>
       )}
 
-      <main>
-        <section className="hero">
-          <div className="hero__copy">
-            <span className="eyebrow"><i /> DAILY SIGNAL BRIEF · 上海时间</span>
-            <h1>看清 AI 演进的<br /><em>有效信号。</em></h1>
-            <p>从论文原文、公司发布与监管披露中，持续跟踪五条决定 AI 下一阶段的技术与资本脉络。</p>
-          </div>
-          <div className="hero__status">
-            <span className="status-label">数据切片</span>
-            <strong>{formatDate(dataset.generated_at)}</strong>
-            <dl>
-              <div><dt>公开事件</dt><dd>{dataset.events.length}</dd></div>
-              <div><dt>健康信源</dt><dd>{dataset.source_health.healthy}</dd></div>
-              <div><dt>降级信源</dt><dd>{dataset.source_health.degraded}</dd></div>
-            </dl>
-          </div>
-        </section>
-
-        <section className="top-signals" aria-labelledby="top-heading">
-          <div className="section-heading section-heading--light">
-            <div>
-              <span className="section-kicker">EDITOR'S PRIORITY</span>
-              <h2 id="top-heading">今日 Top 3</h2>
-            </div>
-            <p>按主题契合、证据、新颖性、影响和可行动性综合排序。</p>
-          </div>
+      <main className="main-container">
+        {/* ================= FEATURED HERO GRID (3-Story + Bottom Row) ================= */}
+        <section className="featured-hero-section" aria-labelledby="featured-heading">
           {topThree.length > 0 ? (
-            <div className="top-grid">
-              {topThree.map((event, index) => (
-                <div className="top-grid__item" key={event.event_id}>
-                  <span className="top-rank">0{index + 1}</span>
-                  <EventCard event={event} compact />
+            <div>
+              <div className="hero-layout-grid">
+                {/* Left Lead Story (Top 1) */}
+                <LeadStoryCard event={topThree[0]} />
+
+                {/* Right Top Headlines (Top 2 & 3) */}
+                <div className="top-headlines-col">
+                  <h3 className="headlines-header">
+                    <span>TOP HEADLINES // 焦点速报</span>
+                    <span style={{ fontSize: '11px', color: 'var(--tc-green-dark)', fontFamily: 'var(--font-tc-mono)' }}>
+                      EDITORIAL TOP 3
+                    </span>
+                  </h3>
+                  <div className="headline-cards-stack">
+                    {topThree.slice(1, 3).map((event, idx) => (
+                      <HeadlineCardItem event={event} key={event.event_id} rank={`0${idx + 2}`} />
+                    ))}
+                  </div>
                 </div>
-              ))}
+              </div>
+
+              {/* Bottom 3-Card Featured Row */}
+              {heroBottomThree.length > 0 && (
+                <div className="hero-bottom-row">
+                  {heroBottomThree.map((event) => (
+                    <HeroMiniCard event={event} key={event.event_id} />
+                  ))}
+                </div>
+              )}
             </div>
           ) : (
-            <div className="empty-state empty-state--dark">
-              <span aria-hidden="true">◎</span>
-              <h3>{isDatasetEmpty ? '等待首批公开信号' : '当前筛选下没有重点信号'}</h3>
+            <div className="empty-state">
+              <h3>{isDatasetEmpty ? '等待首批公开信号' : '当前筛选条件下没有重点特稿'}</h3>
               <p>
                 {isDatasetEmpty
-                  ? '首次采集完成后将在这里自动展示。'
-                  : '调整左侧条件即可恢复今日优先级。'}
+                  ? '首次信源采集完成后将自动在此呈现。'
+                  : '调整检索关键词或降低最低分数限制即可恢复展示。'}
               </p>
             </div>
           )}
         </section>
 
-        <div className="content-layout">
-          <FilterPanel
-            filters={filters}
-            setFilters={setFilters}
-            dataset={dataset}
-            months={months}
-            archiveMonth={archiveMonth}
-            onArchiveMonth={(month) => {
-              setArchiveMonth(month)
-              setFilter(setFilters, 'range', 'all')
-            }}
-          />
-
-          <div className="archive-content">
-            <div className="archive-summary">
-              <div>
-                <span className="section-kicker">LIVE ARCHIVE</span>
-                <h2>{isFiltered ? '筛选结果' : '全部情报脉络'}</h2>
-              </div>
-              <p><strong>{events.length}</strong> 条信号 · 按分数与发布时间排序</p>
+        {/* ================= TWO-COLUMN RIVER LAYOUT ================= */}
+        <div className="river-layout">
+          {/* Main Stream Feed Column (70%) */}
+          <div className="main-stream-col">
+            <div className="stream-section-header">
+              <span className="stream-section-title">
+                {isFiltered ? 'FILTERED STREAM // 筛选归档' : 'THE CRUNCH STREAM // 全景技术与资本脉络'}
+              </span>
+              <span className="stream-section-count">
+                共计 <strong>{events.length}</strong> 条高价值前沿信号 · 按评级与时间排序
+              </span>
             </div>
 
             {events.length === 0 ? (
               <div className="empty-state">
-                <span aria-hidden="true">⌁</span>
-                <h3>{isDatasetEmpty ? '等待首批公开信号' : '这组条件下暂时没有信号'}</h3>
-                <p>
-                  {isDatasetEmpty
-                    ? '首次采集完成后将在这里自动展示。'
-                    : '可以降低最低分、扩大日期范围，或清除全文检索。'}
-                </p>
+                <h3>这组检索条件下暂时没有收录信号</h3>
+                <p>可以尝试清空搜索词、放宽日期范围或降低最低信号分。</p>
                 {!isDatasetEmpty && (
-                  <button type="button" onClick={resetAllFilters}>重置全部筛选</button>
+                  <button
+                    type="button"
+                    className="tc-button-primary"
+                    onClick={resetAllFilters}
+                  >
+                    重置全部筛选条件
+                  </button>
                 )}
               </div>
             ) : (
@@ -756,39 +806,237 @@ function App() {
                 if (topicEvents.length === 0) return null
                 const topic = TOPICS[topicId]
                 return (
-                  <section className={`topic-section topic-section--${topicId}`} key={topicId}>
-                    <header className="topic-header">
-                      <span className="topic-index">{topic.index}</span>
-                      <div>
-                        <span className="section-kicker">{topic.eyebrow}</span>
-                        <h2>{topic.title}</h2>
-                        <p>{topic.description}</p>
+                  <section className={`topic-group-section topic-group-section--${topicId}`} key={topicId}>
+                    <header className="topic-group-header">
+                      <div className="topic-group-header__left">
+                        <span className="topic-group-num">{topic.index}</span>
+                        <div className="topic-group-titles">
+                          <h2>
+                            {topic.eyebrow} · {topic.title}
+                          </h2>
+                          <p>{topic.description}</p>
+                        </div>
                       </div>
-                      <span className="topic-count">{topicEvents.length} 条</span>
+                      <span className="topic-count-pill">{topicEvents.length} 条信号</span>
                     </header>
-                    <div className="event-list">
-                      {topicEvents.map((event) => <EventCard event={event} key={event.event_id} />)}
+                    <div className="stream-cards-list">
+                      {topicEvents.map((event) => (
+                        <EventCard event={event} key={event.event_id} />
+                      ))}
                     </div>
                   </section>
                 )
               })
             )}
           </div>
+
+          {/* TechCrunch Sticky Sidebar Column (30%) */}
+          <aside className="tc-sidebar-col" aria-label="TechCrunch 侧栏功能区">
+            {/* Widget 1: Fast Filter & Signal Controls */}
+            <div className="tc-side-widget">
+              <h4 className="tc-side-widget__header">
+                <span>SIGNAL CONTROL // 信号控制</span>
+                <span style={{ fontSize: '10px', color: 'var(--tc-green-dark)' }}>ACTIVE</span>
+              </h4>
+
+              {/* Fast Search */}
+              <label className="tc-side-search">
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <circle cx="11" cy="11" r="8" />
+                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
+                <input
+                  type="search"
+                  value={filters.q}
+                  onChange={(event) => setFilter(setFilters, 'q', event.target.value)}
+                  placeholder="搜索论文、技术标签..."
+                />
+              </label>
+
+              {/* Fast Score Band Pills */}
+              <div className="tc-side-pills">
+                {[0, 45, 65, 80].map((score) => {
+                  const isActive = filters.minScore === score
+                  return (
+                    <button
+                      key={score}
+                      type="button"
+                      className={`tc-side-pill-btn${isActive ? ' tc-side-pill-btn--active' : ''}`}
+                      onClick={() => setFilter(setFilters, 'minScore', score)}
+                    >
+                      {score === 0 ? '全部' : `${score}+ ${score >= 80 ? '⚡预警' : score >= 65 ? '重点' : '常规'}`}
+                    </button>
+                  )
+                })}
+              </div>
+
+              {/* Dropdowns */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '12px' }}>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '11px', fontWeight: 700, color: 'var(--tc-text-muted)' }}>
+                  <span>归档切片</span>
+                  <select
+                    style={{ padding: '6px 8px', borderRadius: '4px', border: '1px solid var(--tc-border-medium)', fontSize: '12px' }}
+                    value={archiveMonth}
+                    onChange={(event) => {
+                      setArchiveMonth(event.target.value)
+                      setFilter(setFilters, 'range', 'all')
+                    }}
+                  >
+                    <option value="latest">最近 30 天</option>
+                    {months.map((entry) => (
+                      <option key={entry.month} value={entry.month}>
+                        {entry.month} ({entry.count} 条)
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '11px', fontWeight: 700, color: 'var(--tc-text-muted)' }}>
+                  <span>时间范围</span>
+                  <select
+                    style={{ padding: '6px 8px', borderRadius: '4px', border: '1px solid var(--tc-border-medium)', fontSize: '12px' }}
+                    value={filters.range}
+                    onChange={(event) => setFilter(setFilters, 'range', event.target.value as FilterState['range'])}
+                  >
+                    <option value="all">当前切片全部</option>
+                    <option value="24h">最近 24 小时</option>
+                    <option value="7d">最近 7 天</option>
+                    <option value="30d">最近 30 天</option>
+                  </select>
+                </label>
+              </div>
+
+              {isFiltered && (
+                <button
+                  type="button"
+                  onClick={resetAllFilters}
+                  style={{
+                    width: '100%',
+                    marginTop: '14px',
+                    padding: '6px',
+                    fontSize: '11.5px',
+                    fontWeight: 700,
+                    color: 'var(--tc-alert-red)',
+                    background: 'none',
+                    border: '1px dashed var(--tc-alert-red)',
+                    borderRadius: '4px',
+                  }}
+                >
+                  清除所有筛选条件
+                </button>
+              )}
+            </div>
+
+            {/* Widget 2: Most Disruptive Top Signals Leaderboard */}
+            <div className="tc-side-widget">
+              <h4 className="tc-side-widget__header">
+                <span>MOST DISRUPTIVE // 信号榜</span>
+                <span style={{ fontSize: '10px', color: 'var(--tc-green-dark)' }}>TOP 5</span>
+              </h4>
+              <div className="tc-leaderboard-list">
+                {events.slice(0, 5).map((event, idx) => (
+                  <div className="tc-leaderboard-item" key={event.event_id}>
+                    <div className="tc-leaderboard-num">0{idx + 1}</div>
+                    <div className="tc-leaderboard-body">
+                      <h5>
+                        <a href={`#${event.event_id}`}>{event.title_zh}</a>
+                      </h5>
+                      <div className="tc-leaderboard-meta">
+                        <span>⚡ {event.score} PTS</span> • <span>{event.entities[0]?.name ?? 'Lab'}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Widget 3: Lab & Venture Tracker */}
+            <div className="tc-side-widget">
+              <h4 className="tc-side-widget__header">
+                <span>LAB & VENTURE // 前沿机构</span>
+                <span style={{ fontSize: '10px', color: 'var(--tc-text-muted)' }}>{topLabs.length} 家</span>
+              </h4>
+              <div className="tc-chips-cloud">
+                <button
+                  type="button"
+                  className={`tc-entity-chip${filters.company === 'all' ? ' tc-entity-chip--active' : ''}`}
+                  onClick={() => setFilter(setFilters, 'company', 'all')}
+                >
+                  全部
+                </button>
+                {topLabs.map((lab) => {
+                  const isActive = filters.company === lab.id
+                  return (
+                    <button
+                      key={lab.id}
+                      type="button"
+                      className={`tc-entity-chip${isActive ? ' tc-entity-chip--active' : ''}`}
+                      onClick={() => setFilter(setFilters, 'company', isActive ? 'all' : lab.id)}
+                    >
+                      @{lab.name} ({lab.count})
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Widget 4: Newsletter / Intelligence Dispatch Box */}
+            <div className="tc-newsletter-widget">
+              <h4>Get the AI Research Radar Briefing</h4>
+              <p>每天从一手论文、监管披露与开源协议中获取决定 AI 下一阶段的确定性信号。</p>
+              <button
+                type="button"
+                className="tc-button-primary"
+                style={{ width: '100%', justifyContent: 'center' }}
+                onClick={share}
+              >
+                {copied ? '✓ 已复制雷达链接' : '分享此雷达订阅 ↗'}
+              </button>
+            </div>
+          </aside>
         </div>
       </main>
 
-      <footer className="site-footer">
-        <div>
-          <strong>AI Research Radar</strong>
-          <p>公开信息归档，不构成投资建议。事实、公司主张与待确认报道始终分层展示。</p>
+      {/* ================= TECHCRUNCH DEEP FOOTER ================= */}
+      <footer className="tc-footer">
+        <div className="tc-footer-inner">
+          <div className="tc-footer-brand">
+            <div className="tc-footer-logo-row">
+              <div className="brand__tc-box" style={{ width: '32px', height: '32px', fontSize: '18px' }} aria-hidden="true">
+                TC
+              </div>
+              <h3>TechRadar // AI Research</h3>
+            </div>
+            <p>
+              严苛像素级对齐 TechCrunch 视觉与排版体系，全天候追踪长程任务、自治智能体、自我进化、机械可解释性与产业资本公开情报。
+            </p>
+          </div>
+          <div className="tc-footer-telemetry">
+            <div className="tc-footer-telemetry-item">
+              <span className="green-live-dot" />
+              <span>{dataset.source_health.healthy} 个一级信源全时校验正常</span>
+            </div>
+            <div>
+              {dataset.source_health.last_success_at
+                ? `最新采集同步时间：${formatDate(dataset.source_health.last_success_at)}`
+                : '尚无采集记录'}
+            </div>
+            <div>系统版本：TechCrunch Edition · Schema v{dataset.schema_version}</div>
+          </div>
         </div>
-        <div className="footer__health">
-          <span><i /> {dataset.source_health.healthy} 个信源正常</span>
-          <span>
-            {dataset.source_health.last_success_at
-              ? `最近成功同步 ${formatDate(dataset.source_health.last_success_at)}`
-              : '尚无成功采集记录'}
-          </span>
+        <div className="tc-footer-bottom">
+          <span>TECHRADAR · TECHCRUNCH DESIGN SYSTEM ALIGNMENT</span>
+          <span>公开信息归档，不构成投资建议 · 事实、公司主张与待确认报道分层展示</span>
         </div>
       </footer>
     </div>
