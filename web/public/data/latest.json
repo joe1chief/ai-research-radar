@@ -84,7 +84,7 @@
         "arxiv": "https://arxiv.org/abs/2606.12683",
         "alphaxiv": "https://alphaxiv.org/abs/2606.12683"
       },
-      "tags": ["AGI→ASI演进路径", "递归自我改进", "多智能体协作集体"],
+      "tags": ["AGI→ASI", "recursive-improvement", "multi-agent-collectives"],
       "timeline": [
         {
           "at": "2026-06-17T09:00:00Z",
@@ -124,7 +124,7 @@
       "corroborating_urls": [
         { "label": "可解释性研究团队", "url": "https://www.anthropic.com/research/team/interpretability" }
       ],
-      "tags": ["神经回路追踪", "模型内部表征", "推理忠实度诊断"],
+      "tags": ["circuit-tracing", "model-internals", "faithfulness"],
       "timeline": [
         {
           "at": "2025-03-27T16:00:00Z",
@@ -162,7 +162,7 @@
       "score": 89,
       "primary_url": "https://www1.hkexnews.hk/search/titlesearch.xhtml?category=0&lang=EN&market=SEHK&stockId=1000286748",
       "corroborating_urls": [],
-      "tags": ["港交所监管披露", "发行人主记录", "上市申报进程"],
+      "tags": ["HKEX", "issuer-master", "IPO-filing"],
       "timeline": [
         {
           "at": "2026-07-11T16:00:00+08:00",
@@ -203,7 +203,7 @@
       "corroborating_urls": [
         { "label": "A2A 开源项目仓库", "url": "https://github.com/a2aproject/A2A" }
       ],
-      "tags": ["A2A协议", "跨系统智能体互操作", "多智能体协作生态"],
+      "tags": ["A2A", "agent-interoperability", "multi-agent"],
       "timeline": [
         {
           "at": "2025-04-09T15:00:00Z",
@@ -245,7 +245,7 @@
         "arxiv": "https://arxiv.org/abs/2505.03335",
         "alphaxiv": "https://alphaxiv.org/abs/2505.03335"
       },
-      "tags": ["Self-Play强化学习", "自生成任务课程", "可验证执行奖励"],
+      "tags": ["self-play", "self-generated-tasks", "verifiable-reward"],
       "timeline": [
         {
           "at": "2025-05-06T00:00:00Z",
@@ -283,7 +283,7 @@
       "score": 84,
       "primary_url": "https://metr.org/blog/2025-03-19-measuring-ai-ability-to-complete-long-tasks/",
       "corroborating_urls": [],
-      "tags": ["长程任务时间跨度", "自主数字员工", "长任务能力评测"],
+      "tags": ["time-horizon", "long-running-agent", "capability-evaluation"],
       "timeline": [
         {
           "at": "2025-03-19T16:00:00Z",
@@ -321,7 +321,7 @@
       "score": 80,
       "primary_url": "https://www.aisi.gov.uk/research/evaluating-explanations-an-explanatory-virtues-framework-for-mechanistic-interpretability",
       "corroborating_urls": [],
-      "tags": ["机械可解释性", "安全审计框架", "前沿AI治理"],
+      "tags": ["mechanistic-interpretability", "evaluation", "governance"],
       "timeline": [
         {
           "at": "2025-06-03T09:00:00Z",
@@ -369,7 +369,7 @@
       "corroborating_urls": [
         { "label": "ASI 参考研究框架", "url": "https://deepmind.google/research/publications/239142/" }
       ],
-      "tags": ["Touch High规划", "AGI→ASI演进", "机构官方主张"],
+      "tags": ["Touch-High", "AGI→ASI", "company-claim"],
       "timeline": [
         {
           "at": "2026-07-11T19:25:00+08:00",
