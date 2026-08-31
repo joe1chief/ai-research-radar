@@ -184,58 +184,75 @@ sources:
     evidence_type: official_company
     parser: html_links
     enabled: true
-  - id: moonshot-hf
-    entity_id: moonshot
+  - id: cognition-blog
+    entity_id: cognition
     group: tech
-    kind: huggingface_models
-    url: https://huggingface.co/api/models?author=moonshotai&sort=lastModified&direction=-1&limit=20
-    fetch_strategy: huggingface_api
+    kind: html
+    url: https://www.cognition.ai/blog
+    fetch_strategy: html_listing
     cadence: four_hour
-    evidence_type: official_repo
-    parser: hf_json
-    detail_fetch_limit: 3
+    evidence_type: official_company
+    parser: html_links
     enabled: true
-  - id: tencent-hunyuan-hf
-    entity_id: tencent
+  - id: cursor-blog
+    entity_id: anysphere
     group: tech
-    kind: huggingface_models
-    url: https://huggingface.co/api/models?author=tencent&search=Hunyuan&sort=lastModified&direction=-1&limit=20
-    fetch_strategy: huggingface_api
+    kind: html
+    url: https://www.cursor.com/blog
+    fetch_strategy: html_listing
     cadence: four_hour
-    evidence_type: official_repo
-    parser: hf_json
-    detail_fetch_limit: 3
+    evidence_type: official_company
+    parser: html_links
     enabled: true
-  - id: baidu-ernie-releases
-    entity_id: baidu
+  - id: perplexity-blog
+    entity_id: perplexity
     group: tech
-    kind: github_releases
-    url: https://api.github.com/repos/PaddlePaddle/ERNIE/releases?per_page=10
-    fetch_strategy: github_releases
+    kind: html
+    url: https://www.perplexity.ai/hub/blog
+    fetch_strategy: html_listing
     cadence: four_hour
-    evidence_type: official_repo
-    parser: github_json
+    evidence_type: official_company
+    parser: html_links
     enabled: true
-  - id: stepfun-hf
-    entity_id: stepfun
+  - id: physical-intelligence-blog
+    entity_id: physical_intelligence
     group: tech
-    kind: huggingface_models
-    url: https://huggingface.co/api/models?author=stepfun-ai&sort=lastModified&direction=-1&limit=20
-    fetch_strategy: huggingface_api
+    kind: html
+    url: https://www.physicalintelligence.company/blog
+    fetch_strategy: html_listing
     cadence: four_hour
-    evidence_type: official_repo
-    parser: hf_json
-    detail_fetch_limit: 3
+    evidence_type: official_company
+    parser: html_links
     enabled: true
-  - id: internlm-releases
-    entity_id: shanghai_ai_lab
+  - id: world-labs-blog
+    entity_id: world_labs
     group: tech
-    kind: github_releases
-    url: https://api.github.com/repos/InternLM/InternLM/releases?per_page=10
-    fetch_strategy: github_releases
+    kind: html
+    url: https://www.worldlabs.ai/blog
+    fetch_strategy: html_listing
     cadence: four_hour
-    evidence_type: official_repo
-    parser: github_json
+    evidence_type: official_company
+    parser: html_links
+    enabled: true
+  - id: magic-dev-blog
+    entity_id: magic_dev
+    group: tech
+    kind: html
+    url: https://magic.dev/blog
+    fetch_strategy: html_listing
+    cadence: four_hour
+    evidence_type: official_company
+    parser: html_links
+    enabled: true
+  - id: evolutionary-scale-blog
+    entity_id: evolutionary_scale
+    group: tech
+    kind: html
+    url: https://www.evolutionaryscale.ai/blog
+    fetch_strategy: html_listing
+    cadence: four_hour
+    evidence_type: official_company
+    parser: html_links
     enabled: true
   - id: meta-ai-blog
     entity_id: meta
@@ -390,58 +407,105 @@ sources:
     evidence_type: official_company
     parser: html_links
     enabled: true
-  - id: sensetime-news
-    entity_id: sensetime
+  - id: groq-news
+    entity_id: groq
     group: tech
     kind: html
-    url: https://www.sensetime.com/en/news/
+    url: https://groq.com/news/
     fetch_strategy: html_listing
-    cadence: daily
-    evidence_type: official_company
-    parser: html_links
-    include_url_patterns: ['/en/news/\d+$']
-    exclude_title_patterns: ['^View Details$']
-    max_items: 120
-    enabled: true
-  - id: one-ai-news
-    entity_id: one_ai
-    group: tech
-    kind: html
-    url: https://www.lingyiwanwu.com/news
-    fetch_strategy: html_listing
-    cadence: daily
+    cadence: four_hour
     evidence_type: official_company
     parser: html_links
     enabled: true
-  - id: shanghai-ai-lab-news
-    entity_id: shanghai_ai_lab
+  - id: fireworks-blog
+    entity_id: fireworks_ai
     group: tech
     kind: html
-    url: https://www.shlab.org.cn/
+    url: https://fireworks.ai/blog
     fetch_strategy: html_listing
-    cadence: daily
+    cadence: four_hour
     evidence_type: official_company
     parser: html_links
     enabled: true
-  - id: iflytek-skillhub-releases
-    entity_id: iflytek
+  - id: elevenlabs-blog
+    entity_id: elevenlabs
     group: tech
-    kind: github_releases
-    url: https://api.github.com/repos/iflytek/skillhub/releases?per_page=10
-    fetch_strategy: github_releases
-    cadence: daily
-    evidence_type: official_repo
-    parser: github_json
+    kind: html
+    url: https://elevenlabs.io/blog
+    fetch_strategy: html_listing
+    cadence: four_hour
+    evidence_type: official_company
+    parser: html_links
     enabled: true
-  - id: iflytek-hf
-    entity_id: iflytek
+  - id: cartesia-blog
+    entity_id: cartesia
     group: tech
-    kind: huggingface_models
-    url: https://huggingface.co/api/models?author=iFlytekOpenSource&sort=lastModified&direction=-1&limit=20
-    fetch_strategy: huggingface_api
-    cadence: daily
-    evidence_type: official_repo
-    parser: hf_json
+    kind: html
+    url: https://cartesia.ai/blog
+    fetch_strategy: html_listing
+    cadence: four_hour
+    evidence_type: official_company
+    parser: html_links
+    enabled: true
+  - id: decagon-blog
+    entity_id: decagon
+    group: tech
+    kind: html
+    url: https://decagon.ai/blog
+    fetch_strategy: html_listing
+    cadence: four_hour
+    evidence_type: official_company
+    parser: html_links
+    enabled: true
+  - id: sierra-news
+    entity_id: sierra
+    group: tech
+    kind: html
+    url: https://sierra.ai/news
+    fetch_strategy: html_listing
+    cadence: four_hour
+    evidence_type: official_company
+    parser: html_links
+    enabled: true
+  - id: harvey-blog
+    entity_id: harvey
+    group: tech
+    kind: html
+    url: https://www.harvey.ai/blog
+    fetch_strategy: html_listing
+    cadence: four_hour
+    evidence_type: official_company
+    parser: html_links
+    enabled: true
+  - id: modal-blog
+    entity_id: modal
+    group: tech
+    kind: html
+    url: https://modal.com/blog
+    fetch_strategy: html_listing
+    cadence: four_hour
+    evidence_type: official_company
+    parser: html_links
+    enabled: true
+  - id: langchain-blog
+    entity_id: langchain
+    group: tech
+    kind: rss
+    url: https://blog.langchain.dev/rss/
+    fetch_strategy: rss
+    cadence: four_hour
+    evidence_type: official_company
+    parser: rss
+    enabled: true
+  - id: llamaindex-blog
+    entity_id: llamaindex
+    group: tech
+    kind: html
+    url: https://www.llamaindex.ai/blog
+    fetch_strategy: html_listing
+    cadence: four_hour
+    evidence_type: official_company
+    parser: html_links
     enabled: true
 
   - &github_release
