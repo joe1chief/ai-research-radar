@@ -38,7 +38,7 @@ def export_public_dataset(
             RadarEventModel.is_public.is_(True),
             RadarEventModel.archived_at.is_(None),
             RadarEventModel.verification_status != "reported_unconfirmed",
-        ).order_by(RadarEventModel.score.desc(), RadarEventModel.first_seen_at.desc())
+        ).order_by(RadarEventModel.source_time.desc(), RadarEventModel.score.desc())
     ).all()
     names = _entity_names(config_dir)
     all_events = [_public_event(session, event, names) for event in all_rows]

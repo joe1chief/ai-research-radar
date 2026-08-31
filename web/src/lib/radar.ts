@@ -175,12 +175,18 @@ export function filterEvents(
   const now = new Date(generatedAt).getTime()
   const ranges = { '24h': 24, '7d': 24 * 7, '30d': 24 * 30 } as const
   const cutoff = filters.range === 'all' ? null : now - ranges[filters.range] * 60 * 60 * 1000
-  const activityAt = (event: RadarEvent) =>
-    Date.parse(event.material_updated_at || event.published_at || event.first_seen_at || event.source_time)
+  const getEventTimestamp = (event: RadarEvent) => {
+    const raw =
+      event.status === 'MATERIAL_UPDATE' && event.material_updated_at
+        ? event.material_updated_at
+        : event.published_at || event.source_time || event.material_updated_at || event.first_seen_at || ''
+    const parsed = Date.parse(raw)
+    return Number.isFinite(parsed) ? parsed : 0
+  }
 
   return events
     .filter((event) => !searchIds || searchIds.has(event.event_id))
-    .filter((event) => !cutoff || activityAt(event) >= cutoff)
+    .filter((event) => !cutoff || getEventTimestamp(event) >= cutoff)
     .filter((event) => filters.topic === 'all' || event.topics.includes(filters.topic))
     .filter(
       (event) =>
@@ -194,7 +200,7 @@ export function filterEvents(
     )
     .filter((event) => filters.status === 'all' || event.status === filters.status)
     .filter((event) => event.score >= filters.minScore)
-    .sort((a, b) => activityAt(b) - activityAt(a) || b.score - a.score)
+    .sort((a, b) => getEventTimestamp(b) - getEventTimestamp(a) || b.score - a.score)
 }
 
 export function filtersFromSearch(search: string): FilterState {
