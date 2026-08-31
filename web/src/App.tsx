@@ -26,45 +26,45 @@ const TOPICS: Record<
 > = {
   long_horizon: {
     index: '01',
-    eyebrow: 'LONG HORIZON',
-    title: '长程任务',
+    eyebrow: '长程任务',
+    title: '长程规划与持续自主执行',
     short: '长程任务',
-    description: '长期规划、持久记忆与跨小时至跨月的自主执行。',
+    description: '长期规划、持久记忆与跨小时至跨月的自主执行系统。',
   },
   autonomous_agent: {
     index: '02',
-    eyebrow: 'AUTONOMOUS SYSTEMS',
-    title: '自治智能体系统',
+    eyebrow: '自治智能体',
+    title: '自治智能体与协同基础设施',
     short: '自治智能体',
-    description: '工具使用、多智能体协作、数字员工与 Agent Infra。',
+    description: '工具调用、多智能体协作、数字员工与 Agent Infra。',
   },
   self_evolving: {
     index: '03',
-    eyebrow: 'SELF-EVOLVING',
-    title: '完全自我训练',
-    short: '自我进化',
-    description: 'Self-Play、合成数据、RLVR 与递归自我改进。',
+    eyebrow: '自我训练',
+    title: '完全自我训练与递归进化',
+    short: '自我训练',
+    description: 'Self-Play、合成数据生成、RLVR 与递归自我改进。',
   },
   mechanistic_interpretability: {
     index: '04',
-    eyebrow: 'MECHANISTIC INTERPRETABILITY',
-    title: '机械可解释性',
+    eyebrow: '机械可解释性',
+    title: '机械可解释性与表征定位',
     short: '机械可解释性',
-    description: '定位模型内部表征、回路和因果机制。',
+    description: '定位大模型内部表征、神经回路与因果机制。',
   },
   safety_governance: {
     index: '04',
-    eyebrow: 'SAFETY & GOVERNANCE',
-    title: '极致安全治理',
+    eyebrow: '安全治理',
+    title: '极致安全治理与审计机制',
     short: '安全治理',
-    description: '机械可解释性、AI Control、审计与可扩展监督。',
+    description: '机械可解释性、AI Control、安全审计与可扩展监督。',
   },
   industrial_capital: {
     index: '05',
-    eyebrow: 'INDUSTRIAL CAPITAL',
-    title: '产业与资本',
+    eyebrow: '产业资本',
+    title: '产业生态与前沿资本披露',
     short: '产业资本',
-    description: '融资、上市、并购、算力投入与监管级披露。',
+    description: '融资、上市、并购、算力基础设施投入与监管披露。',
   },
 }
 
@@ -89,16 +89,16 @@ function isInSection(event: RadarEvent, topicId: TopicId) {
 const EVIDENCE_LABELS: Record<EvidenceType, string> = {
   paper: '论文原文',
   official_filing: '监管披露',
-  official_company: '公司官方',
-  open_source_release: '开源发布',
+  official_company: '官方发布',
+  open_source_release: '开源协议',
   reputable_media: '可信媒体',
 }
 
 const VERIFICATION_LABELS: Record<VerificationStatus, string> = {
   verified_primary: '一级来源已核验',
   corroborated: '多源交叉验证',
-  company_claim: '公司主张',
-  reported_unconfirmed: '待官方确认',
+  company_claim: '机构官方主张',
+  reported_unconfirmed: '待官方进一步确认',
 }
 
 const STATUS_LABELS: Record<EventStatus, string> = {
@@ -109,15 +109,15 @@ const STATUS_LABELS: Record<EventStatus, string> = {
 }
 
 const EVENT_TYPE_LABELS: Record<string, string> = {
-  PAPER: '论文',
+  PAPER: '学术论文',
   RESEARCH_REPORT: '研究报告',
   MODEL_RELEASE: '模型发布',
-  OPEN_SOURCE_RELEASE: '开源发布',
-  PROTOCOL_RELEASE: '协议发布',
+  OPEN_SOURCE_RELEASE: '开源协议',
+  PROTOCOL_RELEASE: '协议规范',
   SAFETY_RESEARCH: '安全研究',
   IPO_FILING: '上市披露',
-  RAISE: '融资',
-  M_AND_A: '并购',
+  RAISE: '融资动态',
+  M_AND_A: '并购整合',
   CAPEX_COMPUTE: '算力投入',
   MATERIAL_CONTRACT: '重大合同',
   EARNINGS_GUIDANCE: '财报指引',
@@ -127,8 +127,9 @@ const EVENT_TYPE_LABELS: Record<string, string> = {
 
 const DATE_FORMATTER = new Intl.DateTimeFormat('zh-CN', {
   timeZone: 'Asia/Shanghai',
-  month: 'short',
-  day: 'numeric',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
   hour: '2-digit',
   minute: '2-digit',
   hour12: false,
@@ -149,9 +150,9 @@ function setFilter<K extends keyof FilterState>(
 function DisruptScore({ value }: { value: number }) {
   const band = scoreBand(value)
   return (
-    <div className={`tc-score-badge tc-score-badge--${band}`} aria-label={`破坏性分值 ${value} 分`}>
+    <div className={`tc-score-badge tc-score-badge--${band}`} aria-label={`破坏性评分 ${value} 分`}>
       <span>⚡ {value}</span>
-      <span>SCORE</span>
+      <span>分</span>
     </div>
   )
 }
@@ -169,16 +170,16 @@ function EventLinks({ event }: { event: RadarEvent }) {
   const links = [
     { label: '查看一级来源', url: event.primary_url, primary: true },
     ...(event.paper_links?.arxiv
-      ? [{ label: 'arXiv', url: event.paper_links.arxiv, primary: false }]
+      ? [{ label: 'arXiv 论文', url: event.paper_links.arxiv, primary: false }]
       : []),
     ...(event.paper_links?.alphaxiv
-      ? [{ label: 'alphaXiv', url: event.paper_links.alphaxiv, primary: false }]
+      ? [{ label: 'alphaXiv 精读', url: event.paper_links.alphaxiv, primary: false }]
       : []),
     ...(event.paper_links?.code
-      ? [{ label: '代码', url: event.paper_links.code, primary: false }]
+      ? [{ label: '开源代码', url: event.paper_links.code, primary: false }]
       : []),
     ...(event.paper_links?.project
-      ? [{ label: '项目页', url: event.paper_links.project, primary: false }]
+      ? [{ label: '项目主页', url: event.paper_links.project, primary: false }]
       : []),
     ...event.corroborating_urls.map((item) => ({ ...item, primary: false })),
   ]
@@ -203,12 +204,12 @@ function EventLinks({ event }: { event: RadarEvent }) {
 
 function LeadStoryCard({ event }: { event: RadarEvent }) {
   const mainTopic = TOPICS[event.topics[0]]
-  const entityName = event.entities[0]?.name ?? 'Frontier Lab'
+  const entityName = event.entities[0]?.name ?? '前沿实验室'
   return (
     <article className="lead-story-card">
       <div>
         <div className="lead-eyebrow">
-          <span>{mainTopic.eyebrow} // LEAD STORY</span>
+          <span>🏆 今日头条 · {mainTopic.short}</span>
           <span>•</span>
           <span>{EVENT_TYPE_LABELS[event.event_type] ?? event.event_type}</span>
         </div>
@@ -218,14 +219,14 @@ function LeadStoryCard({ event }: { event: RadarEvent }) {
 
         {event.why_it_matters && (
           <div className="crunch-analysis-box">
-            <span className="crunch-analysis-kicker">⚡ CRUNCH ANALYSIS // 核心研判价值</span>
+            <span className="crunch-analysis-kicker">⚡ 核心研判 (Why It Matters)</span>
             <p className="crunch-analysis-text">{event.why_it_matters}</p>
           </div>
         )}
 
         {event.deep_read?.summary && (
           <div className="tc-deep-read-box">
-            <span className="insight-label">📖 alphaXiv 深度精读</span>
+            <span className="insight-label">📖 alphaXiv 论文深度精读</span>
             <p>{event.deep_read.summary}</p>
           </div>
         )}
@@ -234,15 +235,15 @@ function LeadStoryCard({ event }: { event: RadarEvent }) {
       <div>
         <div className="lead-byline-bar">
           <div className="byline-meta-info">
-            <span>By <strong className="byline-author">{entityName}</strong></span>
+            <span>来源：<strong className="byline-author">{entityName}</strong></span>
             <span>•</span>
-            <span>{formatDate(event.published_at)}</span>
+            <span>发布于 {formatDate(event.published_at)}</span>
             <span>•</span>
             <EvidencePill event={event} />
           </div>
           <div className="disrupt-badge">
-            <span>DISRUPT INDEX:</span>
-            <span>{event.score} PTS</span>
+            <span>破坏性评分：</span>
+            <span>{event.score} 分</span>
           </div>
         </div>
 
@@ -256,17 +257,17 @@ function LeadStoryCard({ event }: { event: RadarEvent }) {
 
 function HeadlineCardItem({ event, rank }: { event: RadarEvent; rank: string }) {
   const mainTopic = TOPICS[event.topics[0]]
-  const entityName = event.entities[0]?.name ?? 'Lab'
+  const entityName = event.entities[0]?.name ?? '机构'
   return (
     <div className="headline-card-item">
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-        <span className="headline-card-item__rank">{rank} // {mainTopic.short}</span>
+        <span className="headline-card-item__rank">{rank} · {mainTopic.short}</span>
         <DisruptScore value={event.score} />
       </div>
       <h4 className="headline-card-item__title">{event.title_zh}</h4>
       <p className="headline-card-item__summary">{event.summary_zh}</p>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '11.5px', color: 'var(--tc-text-muted)' }}>
-        <span>By {entityName} • {formatDate(event.published_at)}</span>
+        <span>来源：{entityName} · {formatDate(event.published_at)}</span>
         <a
           className="tc-source-link tc-source-link--primary"
           style={{ padding: '4px 10px', fontSize: '11px' }}
@@ -274,7 +275,7 @@ function HeadlineCardItem({ event, rank }: { event: RadarEvent; rank: string }) 
           target="_blank"
           rel="noreferrer"
         >
-          查看 ↗
+          查看详情 ↗
         </a>
       </div>
     </div>
@@ -283,17 +284,17 @@ function HeadlineCardItem({ event, rank }: { event: RadarEvent; rank: string }) 
 
 function HeroMiniCard({ event }: { event: RadarEvent }) {
   const mainTopic = TOPICS[event.topics[0]]
-  const entityName = event.entities[0]?.name ?? 'Lab'
+  const entityName = event.entities[0]?.name ?? '机构'
   return (
     <div className="hero-mini-card">
       <div>
         <div className="hero-mini-card__eyebrow">
-          {mainTopic.eyebrow} · {EVENT_TYPE_LABELS[event.event_type] ?? event.event_type}
+          {mainTopic.short} · {EVENT_TYPE_LABELS[event.event_type] ?? event.event_type}
         </div>
         <h4 className="hero-mini-card__title">{event.title_zh}</h4>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '11px', color: 'var(--tc-text-muted)', paddingTop: '8px', borderTop: '1px solid var(--tc-border-light)' }}>
-        <span>By {entityName}</span>
+        <span>来源：{entityName}</span>
         <DisruptScore value={event.score} />
       </div>
     </div>
@@ -302,12 +303,12 @@ function HeroMiniCard({ event }: { event: RadarEvent }) {
 
 function EventCard({ event, compact = false }: { event: RadarEvent; compact?: boolean }) {
   const mainTopic = TOPICS[event.topics[0]]
-  const entityName = event.entities[0]?.name ?? 'Frontier Lab'
+  const entityName = event.entities[0]?.name ?? '前沿实验室'
   return (
     <article className={`tc-card${compact ? ' tc-card--compact' : ''}`} id={event.event_id}>
       <header className="tc-card__header">
         <div className="tc-card__kicker-strip">
-          <span className="tc-tag-kicker">{mainTopic.eyebrow}</span>
+          <span className="tc-tag-kicker">{mainTopic.short}</span>
           <span>•</span>
           <span className="tc-entity-kicker">
             {EVENT_TYPE_LABELS[event.event_type] ?? event.event_type}
@@ -323,20 +324,20 @@ function EventCard({ event, compact = false }: { event: RadarEvent; compact?: bo
 
       {event.why_it_matters && (
         <div className="crunch-analysis-box">
-          <span className="crunch-analysis-kicker">⚡ 核心研判 (Why it matters):</span>
+          <span className="crunch-analysis-kicker">⚡ 核心研判 (Why It Matters)</span>
           <p className="crunch-analysis-text">{event.why_it_matters}</p>
         </div>
       )}
 
       {!compact && event.deep_read?.summary && (
         <div className="tc-deep-read-box">
-          <span className="insight-label">📖 alphaXiv 深度精读</span>
+          <span className="insight-label">📖 alphaXiv 论文深度精读</span>
           <p>{event.deep_read.summary}</p>
         </div>
       )}
 
       <div className="tc-proof-strip">
-        <span>By <strong style={{ color: 'var(--tc-black)' }}>{entityName}</strong></span>
+        <span>来源：<strong style={{ color: 'var(--tc-black)' }}>{entityName}</strong></span>
         <span>•</span>
         <EvidencePill event={event} />
         <span>•</span>
@@ -346,7 +347,7 @@ function EventCard({ event, compact = false }: { event: RadarEvent; compact?: bo
         {event.material_updated_at && (
           <>
             <span>•</span>
-            <span>实质更新 {formatDate(event.material_updated_at)}</span>
+            <span>实质更新于 {formatDate(event.material_updated_at)}</span>
           </>
         )}
       </div>
@@ -368,7 +369,7 @@ function EventCard({ event, compact = false }: { event: RadarEvent; compact?: bo
 
       {!compact && event.timeline.length > 0 && (
         <details className="tc-timeline-accordion">
-          <summary>查看事件演进脉络 · {event.timeline.length} 个节点</summary>
+          <summary>查看事件演进脉络 · {event.timeline.length} 个关键节点</summary>
           <ul className="tc-timeline-list">
             {event.timeline.map((entry) => (
               <li className="tc-timeline-item" key={`${entry.at}-${entry.label}`}>
@@ -400,7 +401,7 @@ function LoadingState() {
           textTransform: 'uppercase',
         }}
       >
-        TECHCRUNCH // REALTIME SIGNAL ENGINE
+        AI RESEARCH RADAR // REALTIME INTELLIGENCE
       </span>
       <h1
         style={{
@@ -567,7 +568,7 @@ function App() {
             textTransform: 'uppercase',
           }}
         >
-          DATA DISRUPTED // 数据源读取异常
+          数据源读取异常
         </span>
         <h1
           style={{
@@ -603,16 +604,16 @@ function App() {
 
   return (
     <div className="app-shell">
-      {/* ================= CRUNCH WIRE TICKER ================= */}
+      {/* ================= 顶置前沿快讯跑马灯 ================= */}
       <div className="crunch-wire">
         <div className="crunch-wire__left">
           <span className="crunch-wire__badge">
             <span className="pulse-dot" />
-            CRUNCH WIRE
+            前沿快讯
           </span>
           <span>上海时间 · {formatDate(dataset.generated_at)}</span>
           <span>•</span>
-          <span style={{ color: 'var(--tc-green)' }}>29 信源全时校验</span>
+          <span style={{ color: 'var(--tc-green)' }}>29 个一级信源全时在线</span>
           <span>•</span>
           <span>归档切片: {archiveMonth === 'latest' ? '最近 30 天' : archiveMonth}</span>
         </div>
@@ -621,7 +622,7 @@ function App() {
         </div>
       </div>
 
-      {/* ================= TECHCRUNCH SITE HEADER ================= */}
+      {/* ================= 站点头部导航 ================= */}
       <header className="site-header">
         <div className="header-main">
           <a className="brand" href={import.meta.env.BASE_URL} aria-label="AI Research Radar 首页">
@@ -630,9 +631,9 @@ function App() {
             </div>
             <div className="brand__wordmark">
               <div className="brand__name">
-                Tech<span>Radar</span>
+                AI Research<span> Radar</span>
               </div>
-              <span className="brand__sub">Public AI Intelligence</span>
+              <span className="brand__sub">前沿 AI 研发与产业资本公开归档</span>
             </div>
           </a>
 
@@ -642,7 +643,7 @@ function App() {
               className={`nav-link${filters.topic === 'all' ? ' nav-link--active' : ''}`}
               onClick={() => setFilter(setFilters, 'topic', 'all')}
             >
-              Latest
+              最新情报
             </button>
             {SECTION_IDS.map((topicId) => {
               const topic = TOPICS[topicId]
@@ -665,7 +666,7 @@ function App() {
           <div className="header__actions">
             <span className="live-health-pill">
               <span className="green-live-dot" />
-              {dataset.source_health.healthy} 信源已核验
+              {dataset.source_health.healthy} 个信源已核验
             </span>
             <button className="tc-button-primary" type="button" onClick={share}>
               {copied ? '✓ 链接已复制' : '分享雷达 ↗'}
@@ -673,7 +674,7 @@ function App() {
           </div>
         </div>
 
-        {/* Secondary Category Strip */}
+        {/* 二级药丸分类切换栏 */}
         <div className="category-strip">
           <div className="category-strip__inner">
             <button
@@ -721,27 +722,27 @@ function App() {
               fontWeight: 800,
             }}
           >
-            DEMO MODE
+            脱敏样例
           </span>
-          当前展示公开脱敏样例；生产导出将自动替换，且不包含内部 Prompt、原文或私有投递状态。
+          当前展示公开脱敏样例数据；生产导出将由自动化工作流自动替换，且不包含内部 Prompt、原文或私有投递状态。
         </div>
       )}
 
       <main className="main-container">
-        {/* ================= FEATURED HERO GRID (3-Story + Bottom Row) ================= */}
+        {/* ================= 封面特稿 3+3 网格 ================= */}
         <section className="featured-hero-section" aria-labelledby="featured-heading">
           {topThree.length > 0 ? (
             <div>
               <div className="hero-layout-grid">
-                {/* Left Lead Story (Top 1) */}
+                {/* 左侧主特稿 (Top 1) */}
                 <LeadStoryCard event={topThree[0]} />
 
-                {/* Right Top Headlines (Top 2 & 3) */}
+                {/* 右侧速报 (Top 2 & 3) */}
                 <div className="top-headlines-col">
                   <h3 className="headlines-header">
-                    <span>TOP HEADLINES // 焦点速报</span>
+                    <span>🔥 焦点速报</span>
                     <span style={{ fontSize: '11px', color: 'var(--tc-green-dark)', fontFamily: 'var(--font-tc-mono)' }}>
-                      EDITORIAL TOP 3
+                      精选第 2~3 条
                     </span>
                   </h3>
                   <div className="headline-cards-stack">
@@ -752,7 +753,7 @@ function App() {
                 </div>
               </div>
 
-              {/* Bottom 3-Card Featured Row */}
+              {/* 底部横排 3 张焦点卡片 */}
               {heroBottomThree.length > 0 && (
                 <div className="hero-bottom-row">
                   {heroBottomThree.map((event) => (
@@ -767,29 +768,29 @@ function App() {
               <p>
                 {isDatasetEmpty
                   ? '首次信源采集完成后将自动在此呈现。'
-                  : '调整检索关键词或降低最低分数限制即可恢复展示。'}
+                  : '调整检索关键词或放宽筛选条件即可恢复展示。'}
               </p>
             </div>
           )}
         </section>
 
-        {/* ================= TWO-COLUMN RIVER LAYOUT ================= */}
+        {/* ================= 双栏全景新闻河流 ================= */}
         <div className="river-layout">
-          {/* Main Stream Feed Column (70%) */}
+          {/* 主信息流栏 (70%) */}
           <div className="main-stream-col">
             <div className="stream-section-header">
               <span className="stream-section-title">
-                {isFiltered ? 'FILTERED STREAM // 筛选归档' : 'THE CRUNCH STREAM // 全景技术与资本脉络'}
+                {isFiltered ? '筛选归档结果' : '全景技术与资本脉络'}
               </span>
               <span className="stream-section-count">
-                共计 <strong>{events.length}</strong> 条高价值前沿信号 · 按评级与时间排序
+                共计 <strong>{events.length}</strong> 条高价值前沿信号 · 优先按最新发布时间降序排列
               </span>
             </div>
 
             {events.length === 0 ? (
               <div className="empty-state">
                 <h3>这组检索条件下暂时没有收录信号</h3>
-                <p>可以尝试清空搜索词、放宽日期范围或降低最低信号分。</p>
+                <p>可以尝试清空搜索词、放宽日期范围或降低最低信号分限制。</p>
                 {!isDatasetEmpty && (
                   <button
                     type="button"
@@ -830,16 +831,16 @@ function App() {
             )}
           </div>
 
-          {/* TechCrunch Sticky Sidebar Column (30%) */}
-          <aside className="tc-sidebar-col" aria-label="TechCrunch 侧栏功能区">
-            {/* Widget 1: Fast Filter & Signal Controls */}
+          {/* 吸顶多功能侧边栏 (30%) */}
+          <aside className="tc-sidebar-col" aria-label="侧边栏功能区">
+            {/* 模块 1: 快速检索与信号控制 */}
             <div className="tc-side-widget">
               <h4 className="tc-side-widget__header">
-                <span>SIGNAL CONTROL // 信号控制</span>
-                <span style={{ fontSize: '10px', color: 'var(--tc-green-dark)' }}>ACTIVE</span>
+                <span>⚡ 信号快速筛选</span>
+                <span style={{ fontSize: '10px', color: 'var(--tc-green-dark)' }}>实时生效</span>
               </h4>
 
-              {/* Fast Search */}
+              {/* 搜索框 */}
               <label className="tc-side-search">
                 <svg
                   width="14"
@@ -859,11 +860,11 @@ function App() {
                   type="search"
                   value={filters.q}
                   onChange={(event) => setFilter(setFilters, 'q', event.target.value)}
-                  placeholder="搜索论文、技术标签..."
+                  placeholder="搜索论文、前沿机构、技术标签..."
                 />
               </label>
 
-              {/* Fast Score Band Pills */}
+              {/* 信号分药丸 */}
               <div className="tc-side-pills">
                 {[0, 45, 65, 80].map((score) => {
                   const isActive = filters.minScore === score
@@ -874,13 +875,13 @@ function App() {
                       className={`tc-side-pill-btn${isActive ? ' tc-side-pill-btn--active' : ''}`}
                       onClick={() => setFilter(setFilters, 'minScore', score)}
                     >
-                      {score === 0 ? '全部' : `${score}+ ${score >= 80 ? '⚡预警' : score >= 65 ? '重点' : '常规'}`}
+                      {score === 0 ? '全部' : `${score}+ ${score >= 80 ? '⚡ 预警' : score >= 65 ? '重点' : '常规'}`}
                     </button>
                   )
                 })}
               </div>
 
-              {/* Dropdowns */}
+              {/* 下拉选择 */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '12px' }}>
                 <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '11px', fontWeight: 700, color: 'var(--tc-text-muted)' }}>
                   <span>归档切片</span>
@@ -932,39 +933,42 @@ function App() {
                     borderRadius: '4px',
                   }}
                 >
-                  清除所有筛选条件
+                  清除全部筛选条件
                 </button>
               )}
             </div>
 
-            {/* Widget 2: Most Disruptive Top Signals Leaderboard */}
+            {/* 模块 2: 破坏性信号排行榜 (Top 5) */}
             <div className="tc-side-widget">
               <h4 className="tc-side-widget__header">
-                <span>MOST DISRUPTIVE // 信号榜</span>
+                <span>🏆 破坏性信号榜</span>
                 <span style={{ fontSize: '10px', color: 'var(--tc-green-dark)' }}>TOP 5</span>
               </h4>
               <div className="tc-leaderboard-list">
-                {events.slice(0, 5).map((event, idx) => (
-                  <div className="tc-leaderboard-item" key={event.event_id}>
-                    <div className="tc-leaderboard-num">0{idx + 1}</div>
-                    <div className="tc-leaderboard-body">
-                      <h5>
-                        <a href={`#${event.event_id}`}>{event.title_zh}</a>
-                      </h5>
-                      <div className="tc-leaderboard-meta">
-                        <span>⚡ {event.score} PTS</span> • <span>{event.entities[0]?.name ?? 'Lab'}</span>
+                {[...events]
+                  .sort((a, b) => b.score - a.score)
+                  .slice(0, 5)
+                  .map((event, idx) => (
+                    <div className="tc-leaderboard-item" key={event.event_id}>
+                      <div className="tc-leaderboard-num">0{idx + 1}</div>
+                      <div className="tc-leaderboard-body">
+                        <h5>
+                          <a href={`#${event.event_id}`}>{event.title_zh}</a>
+                        </h5>
+                        <div className="tc-leaderboard-meta">
+                          <span>⚡ {event.score} 分</span> • <span>{event.entities[0]?.name ?? '机构'}</span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
               </div>
             </div>
 
-            {/* Widget 3: Lab & Venture Tracker */}
+            {/* 模块 3: 前沿机构追踪 */}
             <div className="tc-side-widget">
               <h4 className="tc-side-widget__header">
-                <span>LAB & VENTURE // 前沿机构</span>
-                <span style={{ fontSize: '10px', color: 'var(--tc-text-muted)' }}>{topLabs.length} 家</span>
+                <span>🏢 前沿机构跟踪</span>
+                <span style={{ fontSize: '10px', color: 'var(--tc-text-muted)' }}>{topLabs.length} 家机构</span>
               </h4>
               <div className="tc-chips-cloud">
                 <button
@@ -972,7 +976,7 @@ function App() {
                   className={`tc-entity-chip${filters.company === 'all' ? ' tc-entity-chip--active' : ''}`}
                   onClick={() => setFilter(setFilters, 'company', 'all')}
                 >
-                  全部
+                  全部机构
                 </button>
                 {topLabs.map((lab) => {
                   const isActive = filters.company === lab.id
@@ -990,24 +994,24 @@ function App() {
               </div>
             </div>
 
-            {/* Widget 4: Newsletter / Intelligence Dispatch Box */}
+            {/* 模块 4: 简报订阅 */}
             <div className="tc-newsletter-widget">
-              <h4>Get the AI Research Radar Briefing</h4>
-              <p>每天从一手论文、监管披露与开源协议中获取决定 AI 下一阶段的确定性信号。</p>
+              <h4>订阅每日 AI 前沿科研简报</h4>
+              <p>每天追踪一手前沿论文、监管披露与开源协议，获取决定 AI 下一阶段的确定性信号。</p>
               <button
                 type="button"
                 className="tc-button-primary"
                 style={{ width: '100%', justifyContent: 'center' }}
                 onClick={share}
               >
-                {copied ? '✓ 已复制雷达链接' : '分享此雷达订阅 ↗'}
+                {copied ? '✓ 已复制雷达链接' : '分享或订阅此雷达 ↗'}
               </button>
             </div>
           </aside>
         </div>
       </main>
 
-      {/* ================= TECHCRUNCH DEEP FOOTER ================= */}
+      {/* ================= 深度页脚 ================= */}
       <footer className="tc-footer">
         <div className="tc-footer-inner">
           <div className="tc-footer-brand">
@@ -1015,10 +1019,10 @@ function App() {
               <div className="brand__tc-box" style={{ width: '32px', height: '32px', fontSize: '18px' }} aria-hidden="true">
                 TC
               </div>
-              <h3>TechRadar // AI Research</h3>
+              <h3>AI Research Radar</h3>
             </div>
             <p>
-              严苛像素级对齐 TechCrunch 视觉与排版体系，全天候追踪长程任务、自治智能体、自我进化、机械可解释性与产业资本公开情报。
+              全天候追踪长程任务、自治智能体、自我训练、机械可解释性与产业资本公开情报归档。
             </p>
           </div>
           <div className="tc-footer-telemetry">
@@ -1031,12 +1035,12 @@ function App() {
                 ? `最新采集同步时间：${formatDate(dataset.source_health.last_success_at)}`
                 : '尚无采集记录'}
             </div>
-            <div>系统版本：TechCrunch Edition · Schema v{dataset.schema_version}</div>
+            <div>系统版本：Schema v{dataset.schema_version}</div>
           </div>
         </div>
         <div className="tc-footer-bottom">
-          <span>TECHRADAR · TECHCRUNCH DESIGN SYSTEM ALIGNMENT</span>
-          <span>公开信息归档，不构成投资建议 · 事实、公司主张与待确认报道分层展示</span>
+          <span>AI RESEARCH RADAR · 前沿科技情报归档平台</span>
+          <span>公开信息归档，不构成投资建议 · 事实、官方主张与待确认报道分层展示</span>
         </div>
       </footer>
     </div>

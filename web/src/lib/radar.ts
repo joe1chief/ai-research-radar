@@ -176,7 +176,7 @@ export function filterEvents(
   const ranges = { '24h': 24, '7d': 24 * 7, '30d': 24 * 30 } as const
   const cutoff = filters.range === 'all' ? null : now - ranges[filters.range] * 60 * 60 * 1000
   const activityAt = (event: RadarEvent) =>
-    Date.parse(event.material_updated_at || event.first_seen_at)
+    Date.parse(event.material_updated_at || event.published_at || event.first_seen_at || event.source_time)
 
   return events
     .filter((event) => !searchIds || searchIds.has(event.event_id))
@@ -194,7 +194,7 @@ export function filterEvents(
     )
     .filter((event) => filters.status === 'all' || event.status === filters.status)
     .filter((event) => event.score >= filters.minScore)
-    .sort((a, b) => b.score - a.score || activityAt(b) - activityAt(a))
+    .sort((a, b) => activityAt(b) - activityAt(a) || b.score - a.score)
 }
 
 export function filtersFromSearch(search: string): FilterState {
