@@ -114,12 +114,14 @@ jobs:
         env:
           RADAR_DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
           LLM_API_KEY: ${{ secrets.DASHSCOPE_API_KEY }}
+          ALPHAXIV_ACCESS_TOKEN: ${{ secrets.ALPHAXIV_ACCESS_TOKEN }}
         run: uv run radar enrich
       - name: Enrich and cluster with YiCloud
         if: env.LLM_PROVIDER == 'yicloud' && (github.event_name != 'workflow_dispatch' || inputs.delivery_only != true)
         env:
           RADAR_DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
           LLM_API_KEY: ${{ secrets.YICLOUD_API_KEY }}
+          ALPHAXIV_ACCESS_TOKEN: ${{ secrets.ALPHAXIV_ACCESS_TOKEN }}
         run: uv run radar enrich
       - name: Compose today's digest
         env:

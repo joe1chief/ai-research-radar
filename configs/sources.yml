@@ -247,6 +247,46 @@ sources:
     evidence_type: official_company
     parser: html_links
     enabled: true
+  - id: google-research-blog
+    entity_id: alphabet
+    group: tech
+    kind: rss
+    url: https://research.google/blog/rss/
+    fetch_strategy: rss
+    cadence: four_hour
+    evidence_type: official_company
+    parser: rss
+    enabled: true
+  - id: bair-blog
+    entity_id: uc_berkeley
+    group: tech
+    kind: rss
+    url: https://bair.berkeley.edu/blog/feed.xml
+    fetch_strategy: rss
+    cadence: four_hour
+    evidence_type: official_company
+    parser: rss
+    enabled: true
+  - id: stanford-crfm-blog
+    entity_id: stanford
+    group: tech
+    kind: rss
+    url: https://crfm.stanford.edu/feed.xml
+    fetch_strategy: rss
+    cadence: four_hour
+    evidence_type: official_company
+    parser: rss
+    enabled: true
+  - id: allen-ai-news
+    entity_id: allen_ai
+    group: tech
+    kind: rss
+    url: https://allenai.org/feed.xml
+    fetch_strategy: rss
+    cadence: four_hour
+    evidence_type: official_company
+    parser: rss
+    enabled: true
   - id: xai-news
     entity_id: xai
     group: tech

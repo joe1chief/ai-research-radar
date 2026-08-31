@@ -58,6 +58,21 @@ issuers:
     aliases: [Seed, ByteDance Seed, 豆包]
     private: true
     priority: pure_ai
+  - id: uc_berkeley
+    name_en: UC Berkeley BAIR
+    aliases: [BAIR, Berkeley AI Research, UC Berkeley]
+    private: true
+    priority: pure_ai
+  - id: stanford
+    name_en: Stanford CRFM
+    aliases: [CRFM, Stanford, Stanford University]
+    private: true
+    priority: pure_ai
+  - id: allen_ai
+    name_en: Allen Institute for AI
+    aliases: [AI2, Allen AI, Allen Institute]
+    private: true
+    priority: pure_ai
   - id: alphabet
     name_en: Alphabet Inc.
     aliases: [Alphabet, Google, Google DeepMind]
