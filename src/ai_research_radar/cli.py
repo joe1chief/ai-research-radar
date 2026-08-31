@@ -188,6 +188,62 @@ def model_smoke() -> None:
         client.close()
 
 
+@app.command("agentmail-smoke")
+def agentmail_smoke() -> None:
+    """Validate configured AgentMail credentials and inbox connectivity."""
+
+    try:
+        settings = get_settings()
+    except ValidationError:
+        _print(
+            {
+                "ok": False,
+                "stage": "configuration",
+                "error": "invalid_configuration",
+            }
+        )
+        raise typer.Exit(code=2) from None
+
+    if not settings.agentmail_api_key or not settings.agentmail_inbox_id:
+        _print(
+            {
+                "ok": False,
+                "stage": "configuration",
+                "error": "missing_agentmail_credentials",
+                "has_api_key": bool(settings.agentmail_api_key),
+                "has_inbox_id": bool(settings.agentmail_inbox_id),
+            }
+        )
+        raise typer.Exit(code=2)
+
+    try:
+        from agentmail import AgentMail
+        client = AgentMail(api_key=settings.agentmail_api_key)
+        inbox = client.inboxes.get(inbox_id=settings.agentmail_inbox_id)
+        inbox_data = inbox.model_dump() if hasattr(inbox, "model_dump") else dict(inbox)
+        _print(
+            {
+                "ok": True,
+                "inbox_id": settings.agentmail_inbox_id,
+                "inbox_name": inbox_data.get("name") or getattr(inbox, "name", None),
+                "inbox_email": inbox_data.get("email") or getattr(inbox, "email", None),
+                "recipient": settings.digest_recipient,
+                "delivery_mode": settings.delivery_mode,
+                "dry_run": settings.dry_run,
+            }
+        )
+    except Exception as exc:
+        _print(
+            {
+                "ok": False,
+                "stage": "api_call",
+                "error": str(exc),
+                "status_code": getattr(exc, "status_code", None),
+            }
+        )
+        raise typer.Exit(code=1)
+
+
 @app.command()
 def collect(
     group: SourceGroup = typer.Option(..., "--group"),
