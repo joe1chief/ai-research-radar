@@ -5,6 +5,9 @@ on:
     workflows: ["Collect and Alert", "Daily Digest", "Maintenance"]
     types: [completed]
   workflow_dispatch:
+  schedule:
+    # Publish every 4 hours at :35 (shortly after the :17 collection schedule)
+    - cron: "35 */4 * * *"
 
 permissions:
   contents: read
@@ -30,6 +33,7 @@ jobs:
     if: >-
       (github.event_name == 'workflow_dispatch' &&
        github.ref_name == github.event.repository.default_branch) ||
+      (github.event_name == 'schedule') ||
       (github.event.workflow_run.conclusion == 'success' &&
        github.event.workflow_run.head_branch == github.event.repository.default_branch)
     runs-on: ubuntu-latest

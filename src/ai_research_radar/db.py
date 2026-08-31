@@ -592,6 +592,9 @@ def ingest_item(session: Session, spec: SourceSpec, item: CollectedItem) -> tupl
     is_new = row is None
     previous_metadata: dict[str, Any] = {}
     if row is None:
+        target_id = stable_id("arxiv" if arxiv_kind else spec.id, item.external_id)
+        row = session.get(ItemModel, target_id)
+    if row is None:
         row = ItemModel(
             id=stable_id("arxiv" if arxiv_kind else spec.id, item.external_id),
             source_id=spec.id,
@@ -629,7 +632,10 @@ def ingest_item(session: Session, spec: SourceSpec, item: CollectedItem) -> tupl
         if row.current_content_hash == digest:
             return row, False
         previous_metadata = dict(row.metadata_json or {})
-        previous_version = current_item_version(session, row)
+        try:
+            previous_version = current_item_version(session, row)
+        except RuntimeError:
+            previous_version = None
         old_source_metadata = previous_metadata.get("source_metadata", {})
         old_version = old_source_metadata.get("version")
         new_version = item.metadata.get("version")
@@ -647,7 +653,7 @@ def ingest_item(session: Session, spec: SourceSpec, item: CollectedItem) -> tupl
                 item.summary,
             )
             or _substantive_body_change(
-                previous_version.normalized_text or "",
+                previous_version.normalized_text if previous_version else "",
                 item.content or item.summary,
                 kind=spec.kind,
             )
@@ -658,7 +664,7 @@ def ingest_item(session: Session, spec: SourceSpec, item: CollectedItem) -> tupl
             current_title=item.title,
             previous_summary=str(previous_metadata.get("last_summary") or ""),
             current_summary=item.summary,
-            previous_body=previous_version.normalized_text or "",
+            previous_body=previous_version.normalized_text if previous_version else "",
             current_body=item.content or item.summary,
             previous_metadata=old_source_metadata,
             current_metadata=item.metadata,
@@ -674,22 +680,50 @@ def ingest_item(session: Session, spec: SourceSpec, item: CollectedItem) -> tupl
 
     native_version = item.metadata.get("version") or item.metadata.get("tag_name") or "content"
     version_key = f"{native_version}:{digest[:16]}"
-    version = ItemVersionModel(
-        id=stable_id(row.id, digest),
-        item_id=row.id,
-        version_key=version_key,
-        content_hash=digest,
-        title=normalize_content(item.title),
-        abstract_text=normalize_content(item.summary),
-        normalized_text=normalize_content(item.content or item.summary),
-        source_time=item.updated_at or item.published_at,
-        fetched_at=now,
-        metadata_json={
+    version_id = stable_id(row.id, digest)
+    version = session.get(ItemVersionModel, version_id)
+    if version is None:
+        version = session.scalar(
+            select(ItemVersionModel).where(
+                ItemVersionModel.item_id == row.id,
+                ItemVersionModel.content_hash == digest,
+            )
+        )
+    if version is None:
+        version = session.scalar(
+            select(ItemVersionModel).where(
+                ItemVersionModel.item_id == row.id,
+                ItemVersionModel.version_key == version_key,
+            )
+        )
+    if version is None:
+        version = ItemVersionModel(
+            id=version_id,
+            item_id=row.id,
+            version_key=version_key,
+            content_hash=digest,
+            title=normalize_content(item.title),
+            abstract_text=normalize_content(item.summary),
+            normalized_text=normalize_content(item.content or item.summary),
+            source_time=item.updated_at or item.published_at,
+            fetched_at=now,
+            metadata_json={
+                **item.metadata,
+                "evidence_type": item.evidence_type or spec.evidence_type,
+            },
+        )
+        session.add(version)
+    else:
+        version.title = normalize_content(item.title)
+        version.abstract_text = normalize_content(item.summary)
+        version.normalized_text = normalize_content(item.content or item.summary)
+        version.source_time = item.updated_at or item.published_at
+        version.fetched_at = now
+        version.metadata_json = {
+            **(version.metadata_json or {}),
             **item.metadata,
             "evidence_type": item.evidence_type or spec.evidence_type,
-        },
-    )
-    session.add(version)
+        }
     row.metadata_json = {
         **previous_metadata,
         "evidence_type": item.evidence_type or spec.evidence_type,

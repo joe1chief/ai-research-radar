@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import random
 import time
 from datetime import UTC, datetime
@@ -14,6 +15,8 @@ from sqlalchemy.orm import Session
 
 from .contracts import DeliveryState
 from .db import DeliveryModel, WebhookEventModel, utcnow
+
+LOGGER = logging.getLogger(__name__)
 
 
 class DraftClient(Protocol):
@@ -233,13 +236,15 @@ def deliver_outbox(
                             send_at=None,
                             labels=[label],
                         )
-                except (TimeoutError, ConnectionError, httpx.TimeoutException):
+                except (TimeoutError, ConnectionError, httpx.TimeoutException) as exc:
+                    LOGGER.warning("AgentMail shadow draft timeout for %s: %s", row.delivery_key, exc)
                     row.state = DeliveryState.UNKNOWN.value
                     row.last_error = "ambiguous shadow Draft timeout; idempotent client_id is safe to reconcile"
                     result["unknown"] += 1
                     row.updated_at = utcnow()
                     continue
                 except Exception as exc:
+                    LOGGER.warning("AgentMail shadow draft creation failed for %s: %s", row.delivery_key, exc)
                     row.state = (
                         DeliveryState.PENDING.value
                         if _retryable_idempotent_error(exc)

@@ -649,21 +649,41 @@ def enrich_pending(
         )
         radar = _to_contract(event, snapshot_version)
         revision_id = stable_id(event.id, str(revision_no), item.current_content_hash)
-        revision = EventRevisionModel(
-            id=revision_id,
-            event_id=event.id,
-            revision_no=revision_no,
-            content_hash=item.current_content_hash,
-            status=status.value,
-            is_material=status
-            in {
+        revision = session.get(EventRevisionModel, revision_id)
+        if revision is None:
+            revision = session.scalar(
+                select(EventRevisionModel).where(
+                    EventRevisionModel.event_id == event.id,
+                    or_(
+                        EventRevisionModel.revision_no == revision_no,
+                        EventRevisionModel.content_hash == item.current_content_hash,
+                    ),
+                )
+            )
+        if revision is None:
+            revision = EventRevisionModel(
+                id=revision_id,
+                event_id=event.id,
+                revision_no=revision_no,
+                content_hash=item.current_content_hash,
+                status=status.value,
+                is_material=status
+                in {
+                    EventStatus.NEW_ENTITY,
+                    EventStatus.MATERIAL_UPDATE,
+                    EventStatus.DISCOVERED_LATE,
+                },
+                snapshot=radar.model_dump(mode="json"),
+            )
+            session.add(revision)
+        else:
+            revision.status = status.value
+            revision.is_material = status in {
                 EventStatus.NEW_ENTITY,
                 EventStatus.MATERIAL_UPDATE,
                 EventStatus.DISCOVERED_LATE,
-            },
-            snapshot=radar.model_dump(mode="json"),
-        )
-        session.add(revision)
+            }
+            revision.snapshot = radar.model_dump(mode="json")
         if session.get(EventItemModel, (event.id, version.id)) is None:
             session.add(
                 EventItemModel(
@@ -1236,17 +1256,34 @@ def _upgrade_canonical_evidence(
         if primary_arrived or support_updates_primary
         else (_primary_event_version(session, canonical.id) or supporting_version)
     )
-    session.add(
-        EventRevisionModel(
-            id=stable_id(canonical.id, "evidence", str(revision_no), digest),
-            event_id=canonical.id,
-            revision_no=revision_no,
-            content_hash=digest,
-            status=EventStatus.MATERIAL_UPDATE.value,
-            is_material=True,
-            snapshot=_to_contract(canonical, snapshot_version).model_dump(mode="json"),
+    revision_id = stable_id(canonical.id, "evidence", str(revision_no), digest)
+    existing_revision = session.get(EventRevisionModel, revision_id)
+    if existing_revision is None:
+        existing_revision = session.scalar(
+            select(EventRevisionModel).where(
+                EventRevisionModel.event_id == canonical.id,
+                or_(
+                    EventRevisionModel.revision_no == revision_no,
+                    EventRevisionModel.content_hash == digest,
+                ),
+            )
         )
-    )
+    if existing_revision is None:
+        session.add(
+            EventRevisionModel(
+                id=revision_id,
+                event_id=canonical.id,
+                revision_no=revision_no,
+                content_hash=digest,
+                status=EventStatus.MATERIAL_UPDATE.value,
+                is_material=True,
+                snapshot=_to_contract(canonical, snapshot_version).model_dump(mode="json"),
+            )
+        )
+    else:
+        existing_revision.status = EventStatus.MATERIAL_UPDATE.value
+        existing_revision.is_material = True
+        existing_revision.snapshot = _to_contract(canonical, snapshot_version).model_dump(mode="json")
 
 
 def _cluster_media_source_ids(session: Session, event_id: str) -> set[str]:
