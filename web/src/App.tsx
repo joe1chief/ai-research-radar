@@ -816,32 +816,11 @@ function App() {
                 )}
               </div>
             ) : (
-              visibleSectionIds.map((topicId) => {
-                const topicEvents = events.filter((event) => isInSection(event, topicId))
-                if (topicEvents.length === 0) return null
-                const topic = TOPICS[topicId]
-                return (
-                  <section className={`topic-group-section topic-group-section--${topicId}`} key={topicId}>
-                    <header className="topic-group-header">
-                      <div className="topic-group-header__left">
-                        <span className="topic-group-num">{topic.index}</span>
-                        <div className="topic-group-titles">
-                          <h2>
-                            {topic.eyebrow} · {topic.title}
-                          </h2>
-                          <p>{topic.description}</p>
-                        </div>
-                      </div>
-                      <span className="topic-count-pill">{topicEvents.length} 条信号</span>
-                    </header>
-                    <div className="stream-cards-list">
-                      {topicEvents.map((event) => (
-                        <EventCard event={event} key={event.event_id} />
-                      ))}
-                    </div>
-                  </section>
-                )
-              })
+              <div className="stream-cards-list">
+                {events.map((event) => (
+                  <EventCard event={event} key={event.event_id} />
+                ))}
+              </div>
             )}
           </div>
 
