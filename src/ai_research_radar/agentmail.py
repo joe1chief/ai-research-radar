@@ -243,6 +243,7 @@ def deliver_outbox(
                     LOGGER.warning("AgentMail shadow draft creation failed for %s: %s", row.delivery_key, exc)
                     row.last_error = f"shadow draft failed: {exc}"[:2000]
             row.updated_at = utcnow()
+            session.flush()
             result["shadow"] += 1
             continue
         if client is None:
@@ -507,7 +508,7 @@ def _apply_recorded_webhooks(session: Session, row: DeliveryModel) -> str:
 
 def _delivery_label(delivery_key: str) -> str:
     digest = hashlib.sha256(delivery_key.encode("utf-8")).hexdigest()[:24]
-    return f"radar-delivery:{digest}"
+    return f"radar-delivery-{digest}"
 
 
 def _draft_client_id(delivery_key: str) -> str:

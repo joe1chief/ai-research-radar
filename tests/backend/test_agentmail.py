@@ -75,7 +75,7 @@ def test_shadow_with_credentials_creates_review_draft_but_never_sends(session):
     assert client.created[0]["client_id"] == _draft_client_id(delivery.delivery_key)
     assert re.fullmatch(r"[A-Za-z0-9._~-]+", client.created[0]["client_id"])
     assert client.created[0]["send_at"] is None
-    assert client.created[0]["labels"][0].startswith("radar-delivery:")
+    assert client.created[0]["labels"][0].startswith("radar-delivery-")
     assert not client.sent
 
 
@@ -95,7 +95,7 @@ def test_live_mode_schedules_future_draft_once(session):
     assert delivery.agentmail_draft_id == "draft-1"
     assert client.created[0]["client_id"] == _draft_client_id(delivery.delivery_key)
     assert re.fullmatch(r"[A-Za-z0-9._~-]+", client.created[0]["client_id"])
-    assert client.created[0]["labels"][0].startswith("radar-delivery:")
+    assert client.created[0]["labels"][0].startswith("radar-delivery-")
     # A second run cannot recreate or send the draft.
     deliver_outbox(session, mode="live", recipient="reader@example.com", client=client)
     assert len(client.created) == 1
@@ -143,7 +143,7 @@ def test_existing_draft_update_does_not_replace_client_id_or_label(session):
         }
     ]
     assert "client_id" not in client.created[0]
-    assert delivery.metadata_json["agentmail_label"].startswith("radar-delivery:")
+    assert delivery.metadata_json["agentmail_label"].startswith("radar-delivery-")
 
 
 def test_live_mode_sends_due_alert(session):
