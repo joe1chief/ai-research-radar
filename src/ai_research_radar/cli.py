@@ -221,6 +221,37 @@ def agentmail_smoke() -> None:
         client = AgentMail(api_key=settings.agentmail_api_key)
         inbox = client.inboxes.get(inbox_id=settings.agentmail_inbox_id)
         inbox_data = inbox.model_dump() if hasattr(inbox, "model_dump") else dict(inbox)
+
+        draft_test = None
+        if settings.digest_recipient:
+            try:
+                test_client_id = f"smoke-{int(time.time())}"
+                draft = client.inboxes.drafts.create(
+                    inbox_id=settings.agentmail_inbox_id,
+                    to=[settings.digest_recipient],
+                    subject="AgentMail Smoke Test Draft",
+                    text="This is an automated smoke test draft.",
+                    html="<p>This is an automated smoke test draft.</p>",
+                    client_id=test_client_id,
+                )
+                draft_id = getattr(draft, "draft_id", None) or (draft.get("draft_id") if isinstance(draft, dict) else None)
+                draft_test = {"created": True, "draft_id": str(draft_id)}
+                if draft_id:
+                    try:
+                        client.inboxes.drafts.delete(
+                            inbox_id=settings.agentmail_inbox_id,
+                            draft_id=str(draft_id),
+                        )
+                        draft_test["deleted"] = True
+                    except Exception as del_exc:
+                        draft_test["delete_error"] = str(del_exc)
+            except Exception as draft_exc:
+                draft_test = {
+                    "created": False,
+                    "error": str(draft_exc),
+                    "status_code": getattr(draft_exc, "status_code", None),
+                }
+
         _print(
             {
                 "ok": True,
@@ -230,6 +261,7 @@ def agentmail_smoke() -> None:
                 "recipient": settings.digest_recipient,
                 "delivery_mode": settings.delivery_mode,
                 "dry_run": settings.dry_run,
+                "draft_test": draft_test,
             }
         )
     except Exception as exc:

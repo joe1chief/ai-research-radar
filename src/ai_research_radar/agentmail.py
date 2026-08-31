@@ -238,22 +238,10 @@ def deliver_outbox(
                         )
                 except (TimeoutError, ConnectionError, httpx.TimeoutException) as exc:
                     LOGGER.warning("AgentMail shadow draft timeout for %s: %s", row.delivery_key, exc)
-                    row.state = DeliveryState.UNKNOWN.value
-                    row.last_error = "ambiguous shadow Draft timeout; idempotent client_id is safe to reconcile"
-                    result["unknown"] += 1
-                    row.updated_at = utcnow()
-                    continue
+                    row.last_error = f"shadow draft timeout: {exc}"[:2000]
                 except Exception as exc:
                     LOGGER.warning("AgentMail shadow draft creation failed for %s: %s", row.delivery_key, exc)
-                    row.state = (
-                        DeliveryState.PENDING.value
-                        if _retryable_idempotent_error(exc)
-                        else DeliveryState.FAILED.value
-                    )
-                    row.last_error = str(exc)[:2000]
-                    result["failed"] += 1
-                    row.updated_at = utcnow()
-                    continue
+                    row.last_error = f"shadow draft failed: {exc}"[:2000]
             row.updated_at = utcnow()
             result["shadow"] += 1
             continue
