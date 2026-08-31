@@ -627,7 +627,21 @@ function App() {
         <div className="header-main">
           <a className="brand" href={import.meta.env.BASE_URL} aria-label="AI Research Radar 首页">
             <div className="brand__tc-box" aria-hidden="true">
-              TC
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.4"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <circle cx="12" cy="12" r="9" />
+                <circle cx="12" cy="12" r="5" />
+                <circle cx="12" cy="12" r="1.5" fill="currentColor" />
+                <path d="M12 3v4M12 17v4M3 12h4M17 12h4" />
+              </svg>
             </div>
             <div className="brand__wordmark">
               <div className="brand__name">
@@ -1016,8 +1030,22 @@ function App() {
         <div className="tc-footer-inner">
           <div className="tc-footer-brand">
             <div className="tc-footer-logo-row">
-              <div className="brand__tc-box" style={{ width: '32px', height: '32px', fontSize: '18px' }} aria-hidden="true">
-                TC
+              <div className="brand__tc-box" style={{ width: '32px', height: '32px' }} aria-hidden="true">
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.4"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <circle cx="12" cy="12" r="9" />
+                  <circle cx="12" cy="12" r="5" />
+                  <circle cx="12" cy="12" r="1.5" fill="currentColor" />
+                  <path d="M12 3v4M12 17v4M3 12h4M17 12h4" />
+                </svg>
               </div>
               <h3>AI Research Radar</h3>
             </div>
