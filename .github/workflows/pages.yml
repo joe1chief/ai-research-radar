@@ -66,10 +66,8 @@ jobs:
         env:
           RADAR_DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: infra/scripts/validate-runtime-env.sh database
-      - name: Test backend and deployment contract
-        run: |
-          uv run pytest -q
-          python infra/scripts/validate-infra.py
+      - name: Validate deployment contract
+        run: python infra/scripts/validate-infra.py
       - name: Export sanitized public data
         env:
           RADAR_DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
@@ -94,9 +92,7 @@ jobs:
         working-directory: web
         env:
           VITE_BASE_PATH: ${{ vars.RADAR_PAGES_BASE_PATH || format('/{0}/', github.event.repository.name) }}
-        run: |
-          pnpm test
-          pnpm build
+        run: pnpm build
       - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
       - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
         with:

@@ -7,6 +7,18 @@ export default defineConfig({
   base: configuredBase || './',
   plugins: [react()],
   build: {
-    sourcemap: true,
+    target: 'es2022',
+    sourcemap: false,
+    cssCodeSplit: true,
+    reportCompressedSize: false,
+    chunkSizeWarningLimit: 600,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom'],
+          search: ['minisearch'],
+        },
+      },
+    },
   },
 })
