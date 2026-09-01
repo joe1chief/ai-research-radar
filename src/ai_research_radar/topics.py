@@ -94,11 +94,23 @@ class RuleTopicClassifier:
     def from_config(cls, config_dir: Path | str = "configs") -> RuleTopicClassifier:
         return cls(load_topics(config_dir))
 
-    def classify(self, title: str, text: str, *, event_type: str | None = None) -> TopicMatch:
+    def classify(
+        self,
+        title: str,
+        text: str,
+        *,
+        event_type: str | None = None,
+        source_id: str | None = None,
+        evidence_type: str | None = None,
+    ) -> TopicMatch:
         haystack = normalize_content(f"{title}\n{text}").casefold()
         topics: list[Topic] = []
         strengths: dict[str, int] = {}
         matched: dict[str, list[str]] = {}
+
+        is_podcast_feed = bool(
+            source_id and ("podcast" in source_id.casefold() or "sv101" in source_id.casefold() or source_id.startswith("media_"))
+        ) or evidence_type == "reputable_media"
 
         for raw_rule in self.rules:
             topic_id = raw_rule["id"]
@@ -129,6 +141,23 @@ class RuleTopicClassifier:
             topics.append(topic)
             strengths[topic_id] = min(30, 16 + len(found_hard) * 4 + len(found_boosters) * 2)
             matched[topic_id] = found_hard + found_boosters + ([event_type] if event_match else [])
+
+        # Podcast & editorial feeds automatically match podcast_culture
+        if is_podcast_feed and Topic.PODCAST_CULTURE not in topics:
+            topics.append(Topic.PODCAST_CULTURE)
+            strengths[Topic.PODCAST_CULTURE.value] = 20
+            matched[Topic.PODCAST_CULTURE.value] = ["source:podcast_feed"]
+
+        # Official company and open-source updates from AI native startups qualify for frontier topics
+        if not topics and evidence_type in ("official_company", "open_source_release"):
+            default_topic = (
+                Topic.INDUSTRIAL_CAPITAL
+                if event_type and event_type in CAPITAL_EVENT_TERMS
+                else Topic.AUTONOMOUS_AGENT
+            )
+            topics.append(default_topic)
+            strengths[default_topic.value] = 16
+            matched[default_topic.value] = [f"source:{evidence_type}"]
 
         # Mechanistic interpretability is a child view, but both cards must be discoverable.
         if Topic.MECHANISTIC_INTERPRETABILITY in topics and Topic.SAFETY_GOVERNANCE not in topics:

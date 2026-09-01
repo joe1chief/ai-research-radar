@@ -434,7 +434,13 @@ def enrich_pending(
             stats["processed"] += 1
             stats["archived"] += 1
             continue
-        match = classifier.classify(item.title, body, event_type=event_type)
+        match = classifier.classify(
+            item.title,
+            body,
+            event_type=event_type,
+            source_id=source.id,
+            evidence_type=evidence_type,
+        )
         if not match.topics:
             item_meta["processed_hash"] = item.current_content_hash
             item_meta.pop("pending_archive_only", None)
