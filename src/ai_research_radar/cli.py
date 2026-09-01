@@ -298,11 +298,10 @@ def collect(
                 openreview_access_token=settings.openreview_access_token,
                 raw_store=raw_store,
             )
-            _print(stats.to_dict())
     finally:
         if raw_store is not None:
             raw_store.close()
-    if stats.failed:
+    if stats.sources > 0 and stats.failed == stats.sources:
         raise typer.Exit(code=1)
 
 

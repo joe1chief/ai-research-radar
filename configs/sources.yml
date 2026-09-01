@@ -179,7 +179,7 @@ sources:
     entity_id: physical_intelligence
     group: tech
     kind: html
-    url: https://www.physicalintelligence.company/blog
+    url: https://www.pi.website/research
     fetch_strategy: html_listing
     cadence: four_hour
     evidence_type: official_company
@@ -355,7 +355,7 @@ sources:
     entity_id: runway
     group: tech
     kind: html
-    url: https://runwayml.com/blog/
+    url: https://runwayml.com/news
     fetch_strategy: html_listing
     cadence: four_hour
     evidence_type: official_company
@@ -940,7 +940,7 @@ sources:
     entity_id: media_no_priors
     group: tech
     kind: rss
-    url: https://feeds.simplecast.com/7xQx7W6y
+    url: https://feeds.megaphone.fm/NOPRIORS
     fetch_strategy: rss
     cadence: four_hour
     evidence_type: reputable_media
@@ -973,62 +973,7 @@ sources:
     entity_id: media_sv101
     group: tech
     kind: rss
-    url: https://feed.xyzfm.space/u6s53u8tq90t
-    fetch_strategy: rss
-    cadence: four_hour
-    evidence_type: reputable_media
-    parser: rss
-    enabled: true
-
-  - id: latetalk-podcast
-    entity_id: media_latepost
-    group: tech
-    kind: rss
-    url: https://feed.xyzfm.space/n25rtdy8f760
-    fetch_strategy: rss
-    cadence: four_hour
-    evidence_type: reputable_media
-    parser: rss
-    enabled: true
-
-  - id: luanfanshu-podcast
-    entity_id: media_luanfanshu
-    group: tech
-    kind: rss
-    url: https://feed.xyzfm.space/8p0c7g7b282p
-    fetch_strategy: rss
-    cadence: four_hour
-    evidence_type: reputable_media
-    parser: rss
-    enabled: true
-
-  - id: fortytwo-capital-podcast
-    entity_id: media_42capital
-    group: tech
-    kind: rss
-    url: https://feed.xyzfm.space/7b32w91z7290
-    fetch_strategy: rss
-    cadence: four_hour
-    evidence_type: reputable_media
-    parser: rss
-    enabled: true
-
-  - id: crossing-podcast
-    entity_id: media_crossing
-    group: tech
-    kind: rss
-    url: https://feed.xyzfm.space/x5v8p87r6w12
-    fetch_strategy: rss
-    cadence: four_hour
-    evidence_type: reputable_media
-    parser: rss
-    enabled: true
-
-  - id: hardcore-hacker-podcast
-    entity_id: media_hardcore_hacker
-    group: tech
-    kind: rss
-    url: https://hardcorehacker.com/feed.xml
+    url: https://feeds.fireside.fm/sv101/rss
     fetch_strategy: rss
     cadence: four_hour
     evidence_type: reputable_media

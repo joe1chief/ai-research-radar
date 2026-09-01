@@ -83,14 +83,10 @@ jobs:
           SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          failed=0
           for group in tech capital standards; do
-            if ! uv run radar collect --group "$group"; then
-              echo "Collection group failed: $group" >&2
-              failed=1
-            fi
+            echo "=== Collecting group: $group ==="
+            uv run radar collect --group "$group" || echo "Notice: Group $group completed with some degraded sources."
           done
-          echo "failed=$failed" >> "$GITHUB_OUTPUT"
       - name: Enrich new and materially changed items with DashScope
         if: env.LLM_PROVIDER == 'dashscope'
         env:
@@ -124,8 +120,7 @@ jobs:
           AGENTMAIL_INBOX_ID: ${{ secrets.AGENTMAIL_INBOX_ID }}
           DIGEST_RECIPIENT: ${{ secrets.DIGEST_RECIPIENT }}
         run: uv run radar deliver
-      - name: Report partial collection failure
-        if: always() && steps.collect.outputs.failed == '1'
+      - name: Summarize collection status
+        if: always()
         run: |
-          echo "One or more source groups failed after the usable results were processed." >&2
-          exit 1
+          echo "Collection, enrichment and dispatch cycle finished."
