@@ -1,0 +1,18 @@
+{
+  "name": "AI Research Radar | 硅谷前沿情报雷达",
+  "short_name": "AI Radar",
+  "description": "全天候追踪硅谷 AI-Native 独角兽、前沿推理架构与顶流深度播客的专业情报雷达",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0a0a0a",
+  "theme_color": "#00d664",
+  "icons": [
+    {
+      "src": "./radar-logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

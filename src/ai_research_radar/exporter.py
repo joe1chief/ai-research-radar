@@ -1,4 +1,4 @@
-"""Sanitized static export consumed by the public Vite application."""
+"""Sanitized static export consumed by the public Vite application and RSS readers."""
 
 from __future__ import annotations
 
@@ -43,6 +43,26 @@ def export_public_dataset(
     ).all()
     names = _entity_names(config_dir)
     all_events = [_public_event(session, event, names) for event in all_rows]
+
+    # Compute lineage / related events for each event
+    for event in all_events:
+        event_entities = {e["id"] for e in event.get("entities", [])}
+        related = [
+            {
+                "event_id": other["event_id"],
+                "title_zh": other["title_zh"],
+                "published_at": other["published_at"],
+                "score": other["score"],
+            }
+            for other in all_events
+            if other["event_id"] != event["event_id"]
+            and (
+                (event_entities and event_entities.intersection({e["id"] for e in other.get("entities", [])}))
+                or (other.get("cluster_id") and other.get("cluster_id") == event.get("cluster_id"))
+            )
+        ][:4]
+        event["related_events"] = related
+
     events = [
         event
         for event in all_events
@@ -69,9 +89,6 @@ def export_public_dataset(
             "healthy": healthy,
             "degraded": degraded,
             "last_success_at": _iso(max(successes)) if successes else None,
-            # Raw exception text is operational data and may contain internal
-            # paths or request details. The public archive exposes fixed status
-            # codes only.
             "notices": [
                 f"{row.source_id}:source_{row.status}"
                 for row in health_rows
@@ -83,17 +100,29 @@ def export_public_dataset(
     }
     _assert_public_payload(dataset)
     _write_json(output, dataset)
+
+    # Export RSS 2.0 / Atom XML feed
+    rss_xml = _generate_rss_xml(events, timezone)
+    feed_path = output.parent / "feed.xml"
+    feed_path.parent.mkdir(parents=True, exist_ok=True)
+    feed_path.write_text(rss_xml, encoding="utf-8")
+    if output.parent.name == "data":
+        # Also mirror to web/public/feed.xml
+        root_feed_path = output.parent.parent / "feed.xml"
+        if root_feed_path.parent.exists():
+            root_feed_path.write_text(rss_xml, encoding="utf-8")
+
     month_dir = output.parent / "months"
     by_month: dict[str, list[dict[str, Any]]] = {}
     for event in all_events:
         by_month.setdefault(event["published_at"][:7], []).append(event)
     for month, month_events in by_month.items():
         monthly = {
-                **dataset,
-                "window_days": None,
-                "events": month_events,
-                "facets": _facets(month_events),
-            }
+            **dataset,
+            "window_days": None,
+            "events": month_events,
+            "facets": _facets(month_events),
+        }
         _assert_public_payload(monthly)
         _write_json(month_dir / f"{month}.json", monthly)
     month_index = {
@@ -151,6 +180,10 @@ def _public_event(session: Session, event: RadarEventModel, names: dict[str, str
                     "kind": "update",
                 }
             )
+
+    key_quotes = snapshot.get("key_quotes") or []
+    deep_takeaway = snapshot.get("deep_takeaway") or ""
+
     return {
         "event_id": event.id,
         "cluster_id": event.cluster_id,
@@ -172,6 +205,8 @@ def _public_event(session: Session, event: RadarEventModel, names: dict[str, str
         "summary_zh": event.summary_zh,
         "why_it_matters": event.why_it_matters,
         "change_summary": event.change_summary or "",
+        "key_quotes": key_quotes or [],
+        "deep_takeaway": deep_takeaway or "",
         "source_time": _iso(published),
         "published_at": _iso(published),
         "first_seen_at": _iso(event.first_seen_at),
@@ -188,6 +223,54 @@ def _public_event(session: Session, event: RadarEventModel, names: dict[str, str
         "tags": event.cross_tags or [],
         "timeline": timeline,
     }
+
+
+def _generate_rss_xml(events: list[dict[str, Any]], timezone: str) -> str:
+    items_xml = []
+    for event in events[:60]:
+        pub_dt = _parse_iso(event["published_at"])
+        pub_rfc822 = pub_dt.strftime("%a, %d %b %Y %H:%M:%S +0800")
+        title = f"[{event['score']}分] {event['title_zh']}"
+        link = event["primary_url"]
+        guid = event["event_id"]
+        topics_str = " · ".join(event.get("topics", []))
+        summary = event.get("summary_zh", "")
+        why = event.get("why_it_matters", "")
+        takeaway = event.get("deep_takeaway", "")
+        quotes = "".join(f"<li>{q}</li>" for q in event.get("key_quotes", []))
+        quotes_html = f"<p><strong>【核心金句/关键机制】</strong></p><ul>{quotes}</ul>" if quotes else ""
+        takeaway_html = f"<p><strong>【核心洞察】</strong> {takeaway}</p>" if takeaway else ""
+        content_html = (
+            f"<p><strong>【深度研判】</strong> {summary}</p>"
+            f"<p><strong>【为什么重要】</strong> {why}</p>"
+            f"{takeaway_html}"
+            f"{quotes_html}"
+            f"<p><a href='{link}'>查看一手信源 &rarr;</a></p>"
+        )
+        items_xml.append(f"""    <item>
+      <title><![CDATA[{title}]]></title>
+      <link>{link}</link>
+      <guid isPermaLink="false">{guid}</guid>
+      <pubDate>{pub_rfc822}</pubDate>
+      <category>{topics_str}</category>
+      <description><![CDATA[{summary}]]></description>
+      <content:encoded><![CDATA[{content_html}]]></content:encoded>
+    </item>""")
+
+    build_date = datetime.now(UTC).strftime("%a, %d %b %Y %H:%M:%S +0000")
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+  <channel>
+    <title>AI Research Radar | 硅谷与全球 AI 原生独角兽前沿情报</title>
+    <link>https://joe1chief.github.io/ai-research-radar/</link>
+    <description>全天候追踪硅谷 AI-Native 独角兽、前沿推理架构、自主智能体与顶流深度播客的专业情报雷达。</description>
+    <language>zh-CN</language>
+    <lastBuildDate>{build_date}</lastBuildDate>
+    <atom:link href="https://joe1chief.github.io/ai-research-radar/feed.xml" rel="self" type="application/rss+xml"/>
+{"\n".join(items_xml)}
+  </channel>
+</rss>
+"""
 
 
 def _web_evidence_type(event: RadarEventModel, snapshot: dict[str, Any]) -> str:
@@ -209,19 +292,22 @@ def _web_evidence_type(event: RadarEventModel, snapshot: dict[str, Any]) -> str:
         "huggingface_models",
     }:
         return "open_source_release"
-    if evidence == "reputable_media" or event.verification_status == "reported_unconfirmed":
+    if evidence == "reputable_media" or event.source_type in {
+        "reputable_media",
+        "sitemap",
+        "rss",
+    }:
         return "reputable_media"
     return "official_company"
 
 
 def _entity_names(config_dir: Path | str) -> dict[str, str]:
-    try:
-        return {
-            issuer["id"]: issuer.get("name_zh") or issuer.get("name_en") or issuer["id"]
-            for issuer in load_issuers(config_dir)
-        }
-    except (FileNotFoundError, ValueError):
-        return {}
+    issuers = load_issuers(Path(config_dir))
+    return {
+        issuer["id"]: (issuer.get("name_zh") or issuer.get("name_en") or issuer["id"])
+        for issuer in issuers
+        if isinstance(issuer, dict) and "id" in issuer
+    }
 
 
 def _entity_kind(entity: str, names: dict[str, str]) -> str:
@@ -229,43 +315,56 @@ def _entity_kind(entity: str, names: dict[str, str]) -> str:
         return "author_group"
     if entity in names:
         return "issuer"
-    if any(term in entity for term in ("sdk", "mcp", "a2a", "lens", "bench")):
+    if entity in {"mcp", "a2a", "terminal_bench", "gaia"}:
         return "project"
     return "company"
 
 
 def _facets(events: list[dict[str, Any]]) -> dict[str, dict[str, int]]:
+    topics = Counter()
+    entities = Counter()
+    event_types = Counter()
+    evidence_types = Counter()
+    verification = Counter()
+    statuses = Counter()
+    for event in events:
+        topics.update(event.get("topics", []))
+        entities.update(entity["id"] for entity in event.get("entities", []))
+        event_types[event.get("event_type", "")] += 1
+        evidence_types[event.get("evidence_type", "")] += 1
+        verification[event.get("verification_status", "")] += 1
+        statuses[event.get("status", "")] += 1
     return {
-        "topics": dict(Counter(topic for event in events for topic in event["topics"])),
-        "entities": dict(Counter(entity["id"] for event in events for entity in event["entities"])),
-        "event_types": dict(Counter(event["event_type"] for event in events)),
-        "evidence_types": dict(Counter(event["evidence_type"] for event in events)),
-        "verification_statuses": dict(
-            Counter(event["verification_status"] for event in events)
-        ),
-        "statuses": dict(Counter(event["status"] for event in events)),
+        "topics": dict(topics),
+        "entities": dict(entities),
+        "event_types": dict(event_types),
+        "evidence_types": dict(evidence_types),
+        "verification_statuses": dict(verification),
+        "statuses": dict(statuses),
     }
 
 
-def _write_json(path: Path, payload: dict[str, Any]) -> None:
+def _write_json(path: Path, data: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(path.suffix + ".tmp")
-    temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    temporary.replace(path)
+    path.write_text(
+        json.dumps(data, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
 
 
 FORBIDDEN_PUBLIC_KEYS = {
     "recipient",
-    "recipient_hash",
+    "recipient_email",
+    "email",
     "raw_html",
     "raw_content",
-    "raw_storage_path",
     "prompt",
     "system_prompt",
     "delivery",
+    "deliveries",
     "delivery_state",
     "agentmail_draft_id",
-    "agentmail_message_id",
+    "message_id",
     "api_key",
     "secret",
 }

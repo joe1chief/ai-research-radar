@@ -956,6 +956,10 @@ def editorialize_top(
         event.updated_at = utcnow()
         metadata["qwen_plus_marker"] = marker
         metadata["qwen_plus_enriched_at"] = utcnow().isoformat().replace("+00:00", "Z")
+        if result.key_quotes:
+            metadata["key_quotes"] = result.key_quotes
+        if result.deep_takeaway:
+            metadata["deep_takeaway"] = result.deep_takeaway
         version.metadata_json = metadata
         revision = session.scalar(
             select(EventRevisionModel)

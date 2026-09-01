@@ -82,6 +82,14 @@ export interface RadarEvent {
   corroborating_urls: SupportingLink[]
   paper_links?: PaperLinks | null
   deep_read?: DeepRead | null
+  key_quotes?: string[]
+  deep_takeaway?: string
+  related_events?: Array<{
+    event_id: string
+    title_zh: string
+    published_at: string
+    score: number
+  }>
   tags: string[]
   timeline: TimelineEntry[]
 }

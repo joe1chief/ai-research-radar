@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+  <channel>
+    <title>AI Research Radar | 硅谷与全球 AI 原生独角兽前沿情报</title>
+    <link>https://joe1chief.github.io/ai-research-radar/</link>
+    <description>全天候追踪硅谷 AI-Native 独角兽、前沿推理架构、自主智能体与顶流深度播客的专业情报雷达。</description>
+    <language>zh-CN</language>
+    <lastBuildDate>Tue, 01 Sep 2026 10:00:00 +0800</lastBuildDate>
+    <atom:link href="https://joe1chief.github.io/ai-research-radar/feed.xml" rel="self" type="application/rss+xml"/>
+    <item>
+      <title><![CDATA[[94分] Dwarkesh 专访 Anthropic CEO Dario Amodei：推演 2026 智能体临界点与算力指数曲线]]></title>
+      <link>https://www.dwarkeshpatel.com/</link>
+      <guid isPermaLink="false">evt-dwarkesh-dario-amodei-v1</guid>
+      <pubDate>Tue, 01 Sep 2026 08:00:00 +0800</pubDate>
+      <category>podcast_culture · autonomous_agent · safety_governance</category>
+      <description><![CDATA[在长达 3 小时的深度访谈中，Dario 深入剖析了 Claude 架构路线、代码智能体向长程工程演进的临界条件、大模型 scaling 边界以及前沿 AI 安全治理的实操红线。]]></description>
+      <content:encoded><![CDATA[
+        <p><strong>【深度研判】</strong> 在长达 3 小时的深度访谈中，Dario 深入剖析了 Claude 架构路线、代码智能体向长程工程演进的临界条件、大模型 scaling 边界以及前沿 AI 安全治理的实操红线。</p>
+        <p><strong>【为什么重要】</strong> 硅谷最高信息密度一手对谈，揭示了顶级实验室在公开发布之外对模型能力跃迁时间表、算力集群扩张与自主软件工程范式转移的核心研判。</p>
+        <p><strong>【核心洞察】</strong> 模型能力正从‘对话补全’不可逆地跃迁至‘跨周自治执行’。</p>
+        <p><strong>【核心金句与关键机制】</strong></p>
+        <ul>
+          <li>“到 2026 年底，AI 智能体将能够在没有人类干预的情况下完成耗时数周的复杂软件重构。”</li>
+          <li>“真正的瓶颈不再是数据总量，而是高质量的推理环境与可验证的反馈闭环。”</li>
+        </ul>
+        <p><a href="https://www.dwarkeshpatel.com/">查看一手信源 &rarr;</a></p>
+      ]]></content:encoded>
+    </item>
+    <item>
+      <title><![CDATA[[92分] Cursor 发布新一代后台自主智能体：支持端到端任务规划与跨仓库并行修改]]></title>
+      <link>https://www.cursor.com/blog</link>
+      <guid isPermaLink="false">evt-cursor-agent-v1</guid>
+      <pubDate>Sun, 30 Aug 2026 14:00:00 +0800</pubDate>
+      <category>autonomous_agent · long_horizon</category>
+      <description><![CDATA[Anysphere 正式推出 Cursor Background Agent，支持开发者通过自然语言指令委派跨文件长程工程任务，具备独立的沙盒测试、自动定位报错与回滚机制。]]></description>
+      <content:encoded><![CDATA[
+        <p><strong>【深度研判】</strong> Anysphere 正式推出 Cursor Background Agent，支持开发者通过自然语言指令委派跨文件长程工程任务，具备独立的沙盒测试、自动定位报错与回滚机制。</p>
+        <p><strong>【为什么重要】</strong> AI 编程工具正式从‘单点辅助代码补全’进化为‘全自主长程数字工程师’，大幅缩减复杂系统重构周期。</p>
+        <p><strong>【核心洞察】</strong> IDE 正在从‘文本编辑器’转变为‘自主智能体编排操作系统’。</p>
+        <p><strong>【核心金句与关键机制】</strong></p>
+        <ul>
+          <li>“让智能体在后台独立跑完整个测试矩阵并自我修复，直到代码完全通过 CI。”</li>
+        </ul>
+        <p><a href="https://www.cursor.com/blog">查看一手信源 &rarr;</a></p>
+      ]]></content:encoded>
+    </item>
+  </channel>
+</rss>

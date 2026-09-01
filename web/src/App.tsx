@@ -19,6 +19,7 @@ import {
   normalizePublicDataset,
   scoreBand,
 } from './lib/radar'
+import { ShareCardModal } from './components/ShareCardModal'
 
 const TOPICS: Record<
   TopicId,
@@ -173,10 +174,9 @@ function EvidencePill({ event }: { event: RadarEvent }) {
     </span>
   )
 }
-
-function EventLinks({ event }: { event: RadarEvent }) {
+  function EventLinks({ event, onShare }: { event: RadarEvent; onShare?: (event: RadarEvent) => void }) {
   const links = [
-    { label: '查看一级来源', url: event.primary_url, primary: true },
+    { label: '查看一手信源', url: event.primary_url, primary: true },
     ...(event.paper_links?.arxiv
       ? [{ label: 'arXiv 论文', url: event.paper_links.arxiv, primary: false }]
       : []),
@@ -193,7 +193,7 @@ function EventLinks({ event }: { event: RadarEvent }) {
   ]
 
   return (
-    <div className="tc-card__links" aria-label="事件来源链接">
+    <div className="tc-card__links" aria-label="事件来源链接" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px' }}>
       {links.map((link) => (
         <a
           className={link.primary ? 'tc-source-link tc-source-link--primary' : 'tc-source-link'}
@@ -206,11 +206,28 @@ function EventLinks({ event }: { event: RadarEvent }) {
           <span aria-hidden="true">↗</span>
         </a>
       ))}
+      {onShare && (
+        <button
+          type="button"
+          onClick={() => onShare(event)}
+          className="tc-source-link"
+          style={{
+            background: 'rgba(0, 214, 100, 0.08)',
+            borderColor: 'rgba(0, 214, 100, 0.35)',
+            color: '#00d664',
+            cursor: 'pointer',
+            fontWeight: 700,
+          }}
+          title="生成精美长图分享海报"
+        >
+          <span>📸 分享海报</span>
+        </button>
+      )}
     </div>
   )
 }
 
-function LeadStoryCard({ event }: { event: RadarEvent }) {
+function LeadStoryCard({ event, onShare }: { event: RadarEvent; onShare?: (event: RadarEvent) => void }) {
   const mainTopic = TOPICS[event.topics[0]]
   const entityName = event.entities[0]?.name ?? '前沿实验室'
   return (
@@ -223,12 +240,33 @@ function LeadStoryCard({ event }: { event: RadarEvent }) {
         </div>
 
         <h3 className="lead-title">{event.title_zh}</h3>
+
+        {event.deep_takeaway && (
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'rgba(0, 214, 100, 0.1)', border: '1px solid rgba(0, 214, 100, 0.3)', borderRadius: '4px', padding: '4px 10px', fontSize: '12.5px', color: '#00d664', fontWeight: 600, margin: '6px 0 12px 0' }}>
+            <span>🎯 核心洞察：</span>
+            <span>{event.deep_takeaway}</span>
+          </div>
+        )}
+
         <p className="lead-summary">{event.summary_zh}</p>
 
         {event.why_it_matters && (
           <div className="crunch-analysis-box">
             <span className="crunch-analysis-kicker">⚡ 核心研判 (Why It Matters)</span>
             <p className="crunch-analysis-text">{event.why_it_matters}</p>
+          </div>
+        )}
+
+        {event.key_quotes && event.key_quotes.length > 0 && (
+          <div style={{ background: '#1c180e', border: '1px solid #d29922', borderRadius: '6px', padding: '12px 16px', margin: '14px 0' }}>
+            <span style={{ display: 'block', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#e3b341', marginBottom: '6px' }}>
+              🎙️ 核心金句与机制推演
+            </span>
+            <ul style={{ margin: 0, paddingLeft: '18px', color: '#f0e6d2', fontSize: '13px', lineHeight: '1.6' }}>
+              {event.key_quotes.map((quote, i) => (
+                <li key={i} style={{ marginBottom: '4px' }}>“{quote}”</li>
+              ))}
+            </ul>
           </div>
         )}
 
@@ -256,7 +294,7 @@ function LeadStoryCard({ event }: { event: RadarEvent }) {
         </div>
 
         <div style={{ marginTop: '14px' }}>
-          <EventLinks event={event} />
+          <EventLinks event={event} onShare={onShare} />
         </div>
       </div>
     </article>
@@ -309,7 +347,7 @@ function HeroMiniCard({ event }: { event: RadarEvent }) {
   )
 }
 
-function EventCard({ event, compact = false }: { event: RadarEvent; compact?: boolean }) {
+function EventCard({ event, compact = false, onShare }: { event: RadarEvent; compact?: boolean; onShare?: (event: RadarEvent) => void }) {
   const mainTopic = TOPICS[event.topics[0]]
   const entityName = event.entities[0]?.name ?? '前沿实验室'
   return (
@@ -328,12 +366,33 @@ function EventCard({ event, compact = false }: { event: RadarEvent; compact?: bo
       </header>
 
       <h3 className="tc-card__title">{event.title_zh}</h3>
+
+      {event.deep_takeaway && (
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'rgba(0, 214, 100, 0.08)', border: '1px solid rgba(0, 214, 100, 0.25)', borderRadius: '4px', padding: '4px 10px', fontSize: '12px', color: '#00d664', fontWeight: 600, margin: '6px 0 10px 0' }}>
+          <span>🎯 核心洞察：</span>
+          <span>{event.deep_takeaway}</span>
+        </div>
+      )}
+
       <p className="tc-card__summary">{event.summary_zh}</p>
 
       {event.why_it_matters && (
         <div className="crunch-analysis-box">
           <span className="crunch-analysis-kicker">⚡ 核心研判 (Why It Matters)</span>
           <p className="crunch-analysis-text">{event.why_it_matters}</p>
+        </div>
+      )}
+
+      {event.key_quotes && event.key_quotes.length > 0 && (
+        <div style={{ background: '#1c180e', border: '1px solid #d29922', borderRadius: '6px', padding: '10px 14px', margin: '10px 0' }}>
+          <span style={{ display: 'block', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#e3b341', marginBottom: '4px' }}>
+            🎙️ 核心金句与机制推演
+          </span>
+          <ul style={{ margin: 0, paddingLeft: '16px', color: '#f0e6d2', fontSize: '12.5px', lineHeight: '1.5' }}>
+            {event.key_quotes.map((quote, i) => (
+              <li key={i} style={{ marginBottom: '2px' }}>“{quote}”</li>
+            ))}
+          </ul>
         </div>
       )}
 
@@ -373,11 +432,27 @@ function EventCard({ event, compact = false }: { event: RadarEvent; compact?: bo
         ))}
       </div>
 
-      <EventLinks event={event} />
+      <EventLinks event={event} onShare={onShare} />
+
+      {!compact && event.related_events && event.related_events.length > 0 && (
+        <details className="tc-timeline-accordion" style={{ marginTop: '8px' }}>
+          <summary>🧬 查看技术演进与关联事件 · {event.related_events.length} 个前序/衍生节点</summary>
+          <ul className="tc-timeline-list">
+            {event.related_events.map((rel) => (
+              <li className="tc-timeline-item" key={rel.event_id}>
+                <time className="tc-timeline-time">{formatDate(rel.published_at)}</time>
+                <div className="tc-timeline-body">
+                  <strong style={{ color: 'var(--tc-green-dark)' }}>[{rel.score}分] {rel.title_zh}</strong>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
 
       {!compact && event.timeline.length > 0 && (
         <details className="tc-timeline-accordion">
-          <summary>查看事件演进脉络 · {event.timeline.length} 个关键节点</summary>
+          <summary>查看事件证据演进脉络 · {event.timeline.length} 个关键节点</summary>
           <ul className="tc-timeline-list">
             {event.timeline.map((entry) => (
               <li className="tc-timeline-item" key={`${entry.at}-${entry.label}`}>
@@ -437,6 +512,7 @@ function App() {
   const [error, setError] = useState('')
   const [filters, setFilters] = useState<FilterState>(() => filtersFromSearch(location.search))
   const [copied, setCopied] = useState(false)
+  const [sharingEvent, setSharingEvent] = useState<RadarEvent | null>(null)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -690,6 +766,27 @@ function App() {
               <span className="green-live-dot" />
               {dataset.source_health.healthy} 个信源已核验
             </span>
+            <a
+              href="./feed.xml"
+              target="_blank"
+              rel="noreferrer"
+              className="tc-source-link"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+                padding: '6px 12px',
+                color: '#e3b341',
+                borderColor: '#d29922',
+                background: 'rgba(210, 153, 34, 0.1)',
+                textDecoration: 'none',
+                fontWeight: 700,
+                fontSize: '12px',
+              }}
+              title="订阅标准 RSS 2.0 / Atom 源"
+            >
+              <span>📡 RSS 订阅</span>
+            </a>
             <button className="tc-button-primary" type="button" onClick={share}>
               {copied ? '✓ 链接已复制' : '分享雷达 ↗'}
             </button>
@@ -757,7 +854,7 @@ function App() {
             <div>
               <div className="hero-layout-grid">
                 {/* 左侧主特稿 (Top 1) */}
-                <LeadStoryCard event={topThree[0]} />
+                <LeadStoryCard event={topThree[0]} onShare={(evt) => setSharingEvent(evt)} />
 
                 {/* 右侧速报 (Top 2 & 3) */}
                 <div className="top-headlines-col">
@@ -826,7 +923,7 @@ function App() {
             ) : (
               <div className="stream-cards-list">
                 {events.map((event) => (
-                  <EventCard event={event} key={event.event_id} />
+                  <EventCard event={event} key={event.event_id} onShare={(evt) => setSharingEvent(evt)} />
                 ))}
               </div>
             )}
@@ -1058,6 +1155,13 @@ function App() {
           <span>公开信息归档，不构成投资建议 · 事实、官方主张与待确认报道分层展示</span>
         </div>
       </footer>
+
+      {sharingEvent && (
+        <ShareCardModal
+          event={sharingEvent}
+          onClose={() => setSharingEvent(null)}
+        />
+      )}
     </div>
   )
 }

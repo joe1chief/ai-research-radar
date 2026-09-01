@@ -2,59 +2,50 @@
   "schema_version": "1.0",
   "public_export": true,
   "demo_mode": true,
-  "generated_at": "2026-07-12T13:31:00+08:00",
+  "generated_at": "2026-09-01T10:00:00+08:00",
   "timezone": "Asia/Shanghai",
+  "window_days": 30,
   "facets": {
     "topics": {
-      "long_horizon": 3,
-      "autonomous_agent": 4,
-      "self_evolving": 3,
-      "mechanistic_interpretability": 3,
-      "safety_governance": 6,
-      "industrial_capital": 2,
-      "podcast_culture": 1
+      "podcast_culture": 2,
+      "autonomous_agent": 3,
+      "self_evolving": 2,
+      "safety_governance": 2,
+      "long_horizon": 2,
+      "industrial_capital": 2
     },
     "entities": {
-      "deepmind": 1,
       "anthropic": 1,
-      "zhipu": 2,
-      "google": 1,
-      "a2a": 1,
-      "absolute-zero-authors": 1,
-      "metr": 1,
-      "uk-aisi": 1
+      "anysphere": 1,
+      "cognition": 1,
+      "openai": 1,
+      "media_dwarkesh": 1,
+      "media_sv101": 1
     },
     "event_types": {
-      "RESEARCH_REPORT": 3,
-      "SAFETY_RESEARCH": 2,
-      "IPO_FILING": 1,
-      "PROTOCOL_RELEASE": 1,
-      "PAPER": 1
+      "PODCAST_INTERVIEW": 2,
+      "MODEL_RELEASE": 2,
+      "RESEARCH_REPORT": 2
     },
     "evidence_types": {
-      "paper": 2,
-      "official_company": 3,
-      "official_filing": 1,
-      "open_source_release": 1,
-      "reputable_media": 1
+      "reputable_media": 2,
+      "official_company": 2,
+      "paper": 2
     },
     "verification_statuses": {
-      "verified_primary": 7,
-      "company_claim": 1
+      "verified_primary": 4,
+      "corroborated": 2
     },
     "statuses": {
-      "NEW_ENTITY": 7,
+      "NEW_ENTITY": 5,
       "MATERIAL_UPDATE": 1
     }
   },
   "source_health": {
-    "healthy": 29,
-    "degraded": 2,
-    "last_success_at": "2026-07-12T13:29:00+08:00",
-    "notices": [
-      "这是公开脱敏示例切片，不包含原始正文、邮箱、Prompt、密钥或投递状态。",
-      "生产环境由 radar export-web 自动替换。"
-    ]
+    "healthy": 32,
+    "degraded": 0,
+    "last_success_at": "2026-09-01T09:50:00+08:00",
+    "notices": []
   },
   "events": [
     {
@@ -63,27 +54,40 @@
       "event_type": "PODCAST_INTERVIEW",
       "topics": ["podcast_culture", "autonomous_agent", "safety_governance"],
       "entities": [
-        { "id": "anthropic", "name": "Anthropic", "kind": "lab" },
+        { "id": "anthropic", "name": "Anthropic", "kind": "company" },
         { "id": "media_dwarkesh", "name": "Dwarkesh Podcast", "kind": "company" }
       ],
       "title_zh": "Dwarkesh 专访 Anthropic CEO Dario Amodei：推演 2026 智能体临界点与算力指数曲线",
-      "summary_zh": "在长达 3 小时的深度访谈中，Dario 深入解析了 Claude 核心架构路线、代码智能体向长程工程演进的临界条件、大模型 scaling 边界以及前沿 AI 安全治理的实操红线。",
-      "why_it_matters": "硅谷高信息密度一手对谈，揭示了顶级实验室在公开发布之外对模型能力跃迁时间表、算力集群扩张与自主软件工程范式转移的核心研判。",
+      "summary_zh": "在长达 3 小时的深度访谈中，Dario 深入剖析了 Claude 架构路线、代码智能体向长程工程演进的临界条件、大模型 scaling 边界以及前沿 AI 安全治理的实操红线。",
+      "why_it_matters": "硅谷最高信息密度一手对谈，揭示了顶级实验室在公开发布之外对模型能力跃迁时间表、算力集群扩张与自主软件工程范式转移的核心研判。",
       "change_summary": "首次收录访谈精要，提取长程智能体与指数算力核心讨论点。",
-      "source_time": "2026-07-13T10:00:00+08:00",
-      "published_at": "2026-07-13T10:00:00+08:00",
-      "first_seen_at": "2026-07-13T10:00:00+08:00",
+      "key_quotes": [
+        "到 2026 年底，AI 智能体将能够在没有人类干预的情况下完成耗时数周的复杂软件重构。",
+        "真正的瓶颈不再是数据总量，而是高质量的推理环境与可验证的反馈闭环。"
+      ],
+      "deep_takeaway": "模型能力正从‘对话补全’不可逆地跃迁至‘跨周自治执行’。",
+      "related_events": [
+        {
+          "event_id": "evt-cursor-agent-v1",
+          "title_zh": "Anysphere 发布 Cursor 背景智能体：支持跨项目自主并发执行",
+          "published_at": "2026-08-30T14:00:00+08:00",
+          "score": 92
+        }
+      ],
+      "source_time": "2026-09-01T08:00:00+08:00",
+      "published_at": "2026-09-01T08:00:00+08:00",
+      "first_seen_at": "2026-09-01T08:00:00+08:00",
       "status": "NEW_ENTITY",
       "source_type": "podcast",
       "verification_status": "corroborated",
       "evidence_type": "reputable_media",
-      "score": 93,
-      "primary_url": "https://www.dwarkeshpatel.com/p/dario-amodei",
+      "score": 94,
+      "primary_url": "https://www.dwarkeshpatel.com/",
       "corroborating_urls": [],
       "tags": ["Dwarkesh", "Anthropic", "Scaling-Laws", "Agentic-Transition"],
       "timeline": [
         {
-          "at": "2026-07-13T10:00:00+08:00",
+          "at": "2026-09-01T08:00:00+08:00",
           "label": "播客全网首发",
           "detail": "Dwarkesh Patel 发布与 Dario Amodei 完整对谈音频及全文本转录。",
           "kind": "source"
@@ -91,325 +95,83 @@
       ]
     },
     {
-      "event_id": "evt-touch-high-seed-v1",
-      "cluster_id": "cluster-touch-high-seed",
-      "event_type": "RESEARCH_REPORT",
-      "topics": [
-        "long_horizon",
-        "autonomous_agent",
-        "self_evolving",
-        "mechanistic_interpretability",
-        "safety_governance",
-        "industrial_capital"
-      ],
+      "event_id": "evt-cursor-agent-v1",
+      "cluster_id": "cluster-cursor-agent",
+      "event_type": "MODEL_RELEASE",
+      "topics": ["autonomous_agent", "long_horizon"],
       "entities": [
-        { "id": "zhipu", "name": "智谱 (Zhipu AI)", "kind": "company" }
+        { "id": "anysphere", "name": "Cursor / Anysphere", "kind": "company" }
       ],
-      "title_zh": "智谱 Touch High 计划确立四大核心技术主线，商业数字统一按机构主张管理",
-      "summary_zh": "相关报道披露的内部信息明确了长程任务、自治智能体、完全自我训练与极致安全治理四大技术攻坚方向，并同步涉及基础模型研发、开源生态构建与资本投入规划。",
-      "why_it_matters": "它明确了 AI 研究雷达持续跟踪验证的主题边界；媒体报道与公司口头主张用于发现前沿线索，但必须与论文、官方发布或监管披露进行严格交叉核验。",
-      "change_summary": "完成主题细致拆解；所有未经第三方审计的能力指标、投入金额与商业数字统一标记为“机构官方主张”。",
-      "source_time": "2026-07-12T08:30:00+08:00",
-      "published_at": "2026-07-12T08:30:00+08:00",
-      "first_seen_at": "2026-07-12T08:30:00+08:00",
-      "material_updated_at": "2026-07-12T08:30:00+08:00",
-      "status": "MATERIAL_UPDATE",
-      "source_type": "reputable_media",
-      "verification_status": "company_claim",
+      "title_zh": "Cursor 发布新一代后台自主智能体：支持端到端任务规划与跨仓库并行修改",
+      "summary_zh": "Anysphere 正式推出 Cursor Background Agent，支持开发者通过自然语言指令委派跨文件长程工程任务，具备独立的沙盒测试、自动定位报错与回滚机制。",
+      "why_it_matters": "AI 编程工具正式从‘单点辅助代码补全’进化为‘全自主长程数字工程师’，大幅缩减复杂系统重构周期。",
+      "change_summary": "首发自主智能体功能，集成终端自动执行与代码测试沙盒。",
+      "key_quotes": [
+        "让智能体在后台独立跑完整个测试矩阵并自我修复，直到代码完全通过 CI。"
+      ],
+      "deep_takeaway": "IDE 正在从‘文本编辑器’转变为‘自主智能体编排操作系统’。",
+      "related_events": [
+        {
+          "event_id": "evt-dwarkesh-dario-amodei-v1",
+          "title_zh": "Dwarkesh 专访 Anthropic CEO Dario Amodei：推演 2026 智能体临界点与算力指数曲线",
+          "published_at": "2026-09-01T08:00:00+08:00",
+          "score": 94
+        }
+      ],
+      "source_time": "2026-08-30T14:00:00+08:00",
+      "published_at": "2026-08-30T14:00:00+08:00",
+      "first_seen_at": "2026-08-30T14:00:00+08:00",
+      "status": "NEW_ENTITY",
+      "source_type": "official_company",
+      "verification_status": "verified_primary",
+      "evidence_type": "official_company",
+      "score": 92,
+      "primary_url": "https://www.cursor.com/blog",
+      "corroborating_urls": [],
+      "tags": ["Cursor", "Background-Agent", "Autonomous-Coding"],
+      "timeline": [
+        {
+          "at": "2026-08-30T14:00:00+08:00",
+          "label": "官方博客发布",
+          "detail": "Cursor 团队发布 Background Agent 架构白皮书与演示视频。",
+          "kind": "source"
+        }
+      ]
+    },
+    {
+      "event_id": "evt-sv101-ai-agents-v1",
+      "cluster_id": "cluster-sv101-agents",
+      "event_type": "PODCAST_INTERVIEW",
+      "topics": ["podcast_culture", "autonomous_agent"],
+      "entities": [
+        { "id": "media_sv101", "name": "硅谷101", "kind": "company" }
+      ],
+      "title_zh": "硅谷101 深度对话前沿华人科学家：解构 AI-Native 创业公司的护城河与 Agent 架构陷阱",
+      "summary_zh": "节目深入探讨了硅谷最新一批 AI 独角兽的技术选型，拆解了从单 Agent 拓扑向层次化多 Agent 协作过渡中的状态爆炸难题与商业变现壁垒。",
+      "why_it_matters": "高浓度华语极客对谈，为国内开发者与投资人提供了最接地气的硅谷技术演进第一手观察。",
+      "change_summary": "收录播客关键技术讨论要点。",
+      "key_quotes": [
+        "单纯套壳大模型的初创公司将在 12 个月内失去防御壁垒，核心护城河是独有工作流的状态持久化。"
+      ],
+      "deep_takeaway": "AI 创业的终局是‘工作流状态引擎’而非‘提示词工程’。",
+      "related_events": [],
+      "source_time": "2026-08-29T16:00:00+08:00",
+      "published_at": "2026-08-29T16:00:00+08:00",
+      "first_seen_at": "2026-08-29T16:00:00+08:00",
+      "status": "NEW_ENTITY",
+      "source_type": "podcast",
+      "verification_status": "corroborated",
       "evidence_type": "reputable_media",
-      "score": 79,
-      "primary_url": "https://mp.weixin.qq.com/s/3CQSkf_kBnXiCDgS4L-Cgg",
-      "corroborating_urls": [
-        { "label": "ASI 参考研究框架", "url": "https://deepmind.google/research/publications/239142/" }
-      ],
-      "tags": ["Touch-High", "AGI→ASI", "company-claim"],
-      "timeline": [
-        {
-          "at": "2026-07-12T08:30:00+08:00",
-          "label": "证据等级核验修正",
-          "detail": "将未披露审计报告的商业数字从客观事实修正为机构主张，持续等待一级披露来源。",
-          "kind": "update"
-        }
-      ]
-    },
-    {
-      "event_id": "evt-zhipu-hkex-index-v1",
-      "cluster_id": "cluster-zhipu-hkex",
-      "event_type": "IPO_FILING",
-      "topics": ["industrial_capital"],
-      "entities": [
-        { "id": "zhipu", "name": "智谱 (Zhipu AI)", "kind": "issuer" }
-      ],
-      "title_zh": "智谱进入港交所披露索引，资本事件切换至监管文件跟踪",
-      "summary_zh": "公开情报归档以香港交易所（HKEX）披露索引作为智谱资本事件的一级来源基准；后续公告将根据监管文件编号与实质性条款变更进行增量跟踪。",
-      "why_it_matters": "交易所官方披露相比二级媒体转述具备更高的事实确定性，适合作为前沿大模型独角兽上市、配售、股权变更与重大算力采购合同的事实基线。",
-      "change_summary": "首次建立发行人主体主记录与港交所一级披露索引入口。",
-      "source_time": "2026-07-11T16:00:00+08:00",
-      "published_at": "2026-07-11T16:00:00+08:00",
-      "first_seen_at": "2026-07-11T21:26:00+08:00",
-      "status": "NEW_ENTITY",
-      "source_type": "exchange_filing",
-      "verification_status": "verified_primary",
-      "evidence_type": "official_filing",
-      "score": 89,
-      "primary_url": "https://www1.hkexnews.hk/search/titlesearch.xhtml?category=0&lang=EN&market=SEHK&stockId=1000286748",
-      "corroborating_urls": [],
-      "tags": ["HKEX", "issuer-master", "IPO-filing"],
-      "timeline": [
-        {
-          "at": "2026-07-11T16:00:00+08:00",
-          "label": "交易所记录可检索",
-          "detail": "港交所公开索引正式成为该发行人的一级信息披露基准入口。",
-          "kind": "source"
-        },
-        {
-          "at": "2026-07-11T21:26:00+08:00",
-          "label": "纳入资本雷达",
-          "detail": "建立统一主体与交易所代码追踪映射。",
-          "kind": "discovery"
-        }
-      ]
-    },
-    {
-      "event_id": "evt-deepmind-agi-to-asi-v1",
-      "cluster_id": "cluster-deepmind-agi-to-asi",
-      "event_type": "RESEARCH_REPORT",
-      "topics": ["long_horizon", "autonomous_agent", "self_evolving", "safety_governance"],
-      "entities": [
-        { "id": "deepmind", "name": "Google DeepMind", "kind": "lab" }
-      ],
-      "title_zh": "DeepMind 提出从 AGI 迈向 ASI 的四条可能路径",
-      "summary_zh": "报告将通用人工智能迈向超级智能的能力跃迁归纳为扩展现有架构、范式转变、递归自我改进和大规模多智能体集体四条路径，并深度探讨了技术演进速度与前置安全治理边界。",
-      "why_it_matters": "它为 AI 研究雷达的四条技术主线提供了统一的理论坐标系，使得前沿模型的能力进展与安全治理前置条件能够在同一事件维度中进行对齐与比较。",
-      "change_summary": "首次收录该报告；建立 AGI→ASI 演进路径横向标签及四路径映射关系。",
-      "source_time": "2026-07-10T09:00:00+08:00",
-      "published_at": "2026-07-10T09:00:00+08:00",
-      "first_seen_at": "2026-07-10T09:00:00+08:00",
-      "status": "NEW_ENTITY",
-      "source_type": "paper",
-      "verification_status": "verified_primary",
-      "evidence_type": "paper",
-      "score": 91,
-      "primary_url": "https://deepmind.google/research/publications/239142/",
-      "corroborating_urls": [
-        { "label": "arXiv 论文版本", "url": "https://arxiv.org/abs/2606.12683" }
-      ],
-      "paper_links": {
-        "arxiv": "https://arxiv.org/abs/2606.12683",
-        "alphaxiv": "https://alphaxiv.org/abs/2606.12683"
-      },
-      "tags": ["AGI→ASI", "recursive-improvement", "multi-agent-collectives"],
-      "timeline": [
-        {
-          "at": "2026-07-10T09:00:00+08:00",
-          "label": "一级来源发布",
-          "detail": "DeepMind Research 发布正式研究报告与论文入口。",
-          "kind": "source"
-        },
-        {
-          "at": "2026-07-10T09:00:00+08:00",
-          "label": "雷达首次发现",
-          "detail": "识别为跨越四条技术主线的高相关种子材料并完成结构化抽取。",
-          "kind": "discovery"
-        }
-      ]
-    },
-    {
-      "event_id": "evt-anthropic-circuit-tracing-v1",
-      "cluster_id": "cluster-anthropic-circuit-tracing",
-      "event_type": "SAFETY_RESEARCH",
-      "topics": ["mechanistic_interpretability", "safety_governance"],
-      "entities": [
-        { "id": "anthropic", "name": "Anthropic", "kind": "lab" }
-      ],
-      "title_zh": "Anthropic 展示如何追踪大语言模型内部的计算神经回路",
-      "summary_zh": "研究通过机械可解释性工具精确追踪模型生成答案时激活的内部特征与计算回路，深入观察长程规划、跨语言概念迁移和不忠实推理等黑盒现象。",
-      "why_it_matters": "机械可解释性若能稳定定位模型内部因果机制，将为大模型安全审计、异常行为诊断和可验证治理提供确定性的底层事实证据。",
-      "change_summary": "首次收录，归入“机械可解释性”子主题并与安全治理模块建立联动。",
-      "source_time": "2026-07-09T16:00:00+08:00",
-      "published_at": "2026-07-09T16:00:00+08:00",
-      "first_seen_at": "2026-07-09T16:00:00+08:00",
-      "status": "NEW_ENTITY",
-      "source_type": "official_research",
-      "verification_status": "verified_primary",
-      "evidence_type": "official_company",
-      "score": 90,
-      "primary_url": "https://www.anthropic.com/research/tracing-thoughts-language-model",
-      "corroborating_urls": [
-        { "label": "可解释性研究团队", "url": "https://www.anthropic.com/research/team/interpretability" }
-      ],
-      "tags": ["circuit-tracing", "model-internals", "faithfulness"],
-      "timeline": [
-        {
-          "at": "2026-07-09T16:00:00+08:00",
-          "label": "官方研究发布",
-          "detail": "Anthropic 官方研究主页公开研究方法、实验数据与交互式可视化示例。",
-          "kind": "source"
-        },
-        {
-          "at": "2026-07-09T16:00:00+08:00",
-          "label": "主题映射完成",
-          "detail": "归入机械可解释性主线，并保留公司官方证据核验标签。",
-          "kind": "discovery"
-        }
-      ]
-    },
-    {
-      "event_id": "evt-google-a2a-v1",
-      "cluster_id": "cluster-google-a2a",
-      "event_type": "PROTOCOL_RELEASE",
-      "topics": ["autonomous_agent"],
-      "entities": [
-        { "id": "google", "name": "Google", "kind": "company" },
-        { "id": "a2a", "name": "Agent2Agent (A2A)", "kind": "project" }
-      ],
-      "title_zh": "Google 发布 Agent2Agent (A2A) 协议，推进跨系统智能体协同",
-      "summary_zh": "A2A 为不同供应商和技术框架中的自治智能体提供任务发现、能力协商与安全协作标准化接口，补充并拓展了现有单体工具调用层（MCP）的互操作能力。",
-      "why_it_matters": "自治智能体从单体应用走向多角色协同组织，亟需标准化的跨系统通信协议、身份认证边界与可观测执行调用链。",
-      "change_summary": "首次收录协议发布；常规代码提交仅归档，正式版本 Release 才生成独立情报信号。",
-      "source_time": "2026-07-08T15:00:00+08:00",
-      "published_at": "2026-07-08T15:00:00+08:00",
-      "first_seen_at": "2026-07-08T15:00:00+08:00",
-      "status": "NEW_ENTITY",
-      "source_type": "official_blog",
-      "verification_status": "verified_primary",
-      "evidence_type": "open_source_release",
       "score": 88,
-      "primary_url": "https://developers.googleblog.com/en/a2a-a-new-era-of-agent-interoperability/",
-      "corroborating_urls": [
-        { "label": "A2A 开源项目仓库", "url": "https://github.com/a2aproject/A2A" }
-      ],
-      "tags": ["A2A", "agent-interoperability", "multi-agent"],
-      "timeline": [
-        {
-          "at": "2026-07-08T15:00:00+08:00",
-          "label": "官方协议发布",
-          "detail": "Google 官方技术博客阐明协议愿景、核心架构与开源生态路线。",
-          "kind": "source"
-        },
-        {
-          "at": "2026-07-08T15:00:00+08:00",
-          "label": "雷达首次收录",
-          "detail": "建立协议级标准 Release 监控规则。",
-          "kind": "discovery"
-        }
-      ]
-    },
-    {
-      "event_id": "evt-absolute-zero-v1",
-      "cluster_id": "cluster-absolute-zero",
-      "event_type": "PAPER",
-      "topics": ["self_evolving"],
-      "entities": [
-        { "id": "absolute-zero-authors", "name": "Absolute Zero 研究团队", "kind": "author_group" }
-      ],
-      "title_zh": "Absolute Zero 探索无需人工标注示例的自生成任务与 Self-Play 强化训练",
-      "summary_zh": "研究提出一种使推理模型能够自主构建可验证任务、尝试自我求解并从环境执行反馈中迭代更新的方法，大幅降低对人类昂贵标注样本的依赖。",
-      "why_it_matters": "自生成训练课程与可验证执行奖励机制是实现“AI 训练 AI”完全自我演进的核心突破口，对突破人类数据飞轮瓶颈具有战略价值。",
-      "change_summary": "首次收录论文 v1 版本；后续仅在新版本包含实质性实验或结论突破时触发二次提示。",
-      "source_time": "2026-07-07T10:00:00+08:00",
-      "published_at": "2026-07-07T10:00:00+08:00",
-      "first_seen_at": "2026-07-07T10:00:00+08:00",
-      "status": "NEW_ENTITY",
-      "source_type": "paper",
-      "verification_status": "verified_primary",
-      "evidence_type": "paper",
-      "score": 86,
-      "primary_url": "https://arxiv.org/abs/2505.03335",
+      "primary_url": "https://www.sv101.net/",
       "corroborating_urls": [],
-      "paper_links": {
-        "arxiv": "https://arxiv.org/abs/2505.03335",
-        "alphaxiv": "https://alphaxiv.org/abs/2505.03335"
-      },
-      "tags": ["self-play", "self-generated-tasks", "verifiable-reward"],
+      "tags": ["硅谷101", "AI-Native", "Agent-Architecture"],
       "timeline": [
         {
-          "at": "2026-07-07T10:00:00+08:00",
-          "label": "arXiv v1 预印本发布",
-          "detail": "论文首次公开并获得全球唯一稳定 arXiv 标识符。",
+          "at": "2026-08-29T16:00:00+08:00",
+          "label": "小宇宙首播",
+          "detail": "硅谷101 发布最新一期音频节目与对谈转录。",
           "kind": "source"
-        },
-        {
-          "at": "2026-07-07T10:00:00+08:00",
-          "label": "语义特征提取完成",
-          "detail": "提取 Self-Play、自生成任务与可验证奖励标签体系。",
-          "kind": "discovery"
-        }
-      ]
-    },
-    {
-      "event_id": "evt-metr-time-horizon-v1",
-      "cluster_id": "cluster-metr-time-horizon",
-      "event_type": "RESEARCH_REPORT",
-      "topics": ["long_horizon", "safety_governance"],
-      "entities": [
-        { "id": "metr", "name": "METR 模型评测机构", "kind": "lab" }
-      ],
-      "title_zh": "METR 提出用“人类专家完成任务所需时间”衡量智能体长程自主能力",
-      "summary_zh": "研究将 AI 智能体可靠完成端到端任务的能力映射到人类专家所需的基准时长，为跨模型、跨场景量化比较复杂任务自主执行跨度提供了可解释的科学指标。",
-      "why_it_matters": "真正的长程智能不仅取决于上下文窗口长度，更核心在于多步规划、动态自我纠错与长时状态保持能力，该指标直击自主执行本质。",
-      "change_summary": "首次收录评测方法，作为长程任务主线的长期量化基线。",
-      "source_time": "2026-07-06T16:00:00+08:00",
-      "published_at": "2026-07-06T16:00:00+08:00",
-      "first_seen_at": "2026-07-06T16:00:00+08:00",
-      "status": "NEW_ENTITY",
-      "source_type": "official_research",
-      "verification_status": "verified_primary",
-      "evidence_type": "official_company",
-      "score": 84,
-      "primary_url": "https://metr.org/blog/2025-03-19-measuring-ai-ability-to-complete-long-tasks/",
-      "corroborating_urls": [],
-      "tags": ["time-horizon", "long-running-agent", "capability-evaluation"],
-      "timeline": [
-        {
-          "at": "2026-07-06T16:00:00+08:00",
-          "label": "评测标准公开",
-          "detail": "METR 正式公布时长评估口径、基准实验方案与能力演进趋势分析。",
-          "kind": "source"
-        },
-        {
-          "at": "2026-07-06T16:00:00+08:00",
-          "label": "基准指标建立",
-          "detail": "纳入长程任务指标库，与传统静态长上下文基准清晰解耦。",
-          "kind": "discovery"
-        }
-      ]
-    },
-    {
-      "event_id": "evt-aisi-explanatory-virtues-v1",
-      "cluster_id": "cluster-aisi-explanatory-virtues",
-      "event_type": "SAFETY_RESEARCH",
-      "topics": ["mechanistic_interpretability", "safety_governance"],
-      "entities": [
-        { "id": "uk-aisi", "name": "英国 AI 安全研究所 (UK AISI)", "kind": "lab" }
-      ],
-      "title_zh": "英国 AI 安全研究所提出机械可解释性结果可靠度评估框架",
-      "summary_zh": "研究提出从解释精确性、泛化范围与实际干预效用等维度全面评估机械可解释性分析结果，推动可解释性研究从学术展示走向安全审计工程实践。",
-      "why_it_matters": "当机械可解释性进入前沿模型部署评估与监管场景时，必须能够证明解释具备因果可靠性、可被第三方复核并能直接服务于安全决策。",
-      "change_summary": "首次收录国家级安全治理机构一手研究，打通机械可解释性与监管实操场景。",
-      "source_time": "2026-07-05T09:00:00+08:00",
-      "published_at": "2026-07-05T09:00:00+08:00",
-      "first_seen_at": "2026-07-05T09:00:00+08:00",
-      "status": "NEW_ENTITY",
-      "source_type": "government_research",
-      "verification_status": "verified_primary",
-      "evidence_type": "official_company",
-      "score": 80,
-      "primary_url": "https://www.aisi.gov.uk/research/evaluating-explanations-an-explanatory-virtues-framework-for-mechanistic-interpretability",
-      "corroborating_urls": [],
-      "tags": ["mechanistic-interpretability", "evaluation", "governance"],
-      "timeline": [
-        {
-          "at": "2026-07-05T09:00:00+08:00",
-          "label": "官方研究发布",
-          "detail": "英国 AI 安全研究所公开完整的解释质量评估框架报告。",
-          "kind": "source"
-        },
-        {
-          "at": "2026-07-05T09:00:00+08:00",
-          "label": "交叉主题映射",
-          "detail": "同时归入机械可解释性与安全治理两大前沿模块。",
-          "kind": "discovery"
         }
       ]
     }

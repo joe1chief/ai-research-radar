@@ -132,6 +132,9 @@ export function normalizePublicDataset(value: PublicDataset): PublicDataset {
         corroborating_urls: event.corroborating_urls ?? [],
         paper_links: event.paper_links,
         deep_read: event.deep_read,
+        key_quotes: event.key_quotes ?? [],
+        deep_takeaway: event.deep_takeaway ?? '',
+        related_events: event.related_events ?? [],
         tags: event.tags ?? [],
         timeline: event.timeline ?? [],
       }
