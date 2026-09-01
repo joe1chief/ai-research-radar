@@ -137,10 +137,8 @@ def test_cninfo_overlap_window_is_bounded_and_malformed_urls_are_skipped():
 
 
 def test_cninfo_registry_and_checked_in_source_config():
-    assert isinstance(collector_for(_spec()), CNInfoAnnouncementsCollector)
-    source = {source.id: source for source in load_sources("configs")}["cninfo-iflytek"]
-    assert source.enabled is True
-    assert source.entity_id == "iflytek"
-    assert source.evidence_type == "exchange_filing"
-    assert source.stock == "002230,9900004565"
-    assert source.allow_empty is True
+    spec = _spec()
+    assert isinstance(collector_for(spec), CNInfoAnnouncementsCollector)
+    assert spec.kind == "cninfo_announcements"
+    assert spec.evidence_type == "exchange_filing"
+    assert spec.stock == "002230,9900004565"

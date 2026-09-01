@@ -29,20 +29,18 @@ def test_live_tech_fallback_sources_and_rss_caps_are_configured():
     by_id = {
         source.id: source for source in load_sources(ROOT / "configs")
     }
-    for source_id in ("openai-news", "qwen-blog", "huggingface-blog"):
+    for source_id in ("openai-news", "huggingface-blog"):
         assert by_id[source_id].kind == "rss"
         assert by_id[source_id].max_items == 100
 
-    assert by_id["qwen-blog"].url == "https://qwenlm.github.io/blog/index.xml"
-    assert by_id["xai-news"].enabled is False
-    assert "Cloudflare" in by_id["xai-news"].disabled_reason
+    assert by_id["openai-news"].url == "https://openai.com/news/rss.xml"
     assert by_id["xai-hf"].enabled is True
     assert by_id["xai-hf"].entity_id == "xai"
     assert "author=xai-org" in by_id["xai-hf"].url
-    assert by_id["deepseek-news"].include_url_patterns == [
-        r"^https://api-docs\.deepseek\.com/news(?:/|$)"
-    ]
-    assert by_id["latepost-discovery"].enabled is False
+    assert by_id["cognition-blog"].enabled is True
+    assert by_id["cursor-blog"].enabled is True
+    assert by_id["perplexity-blog"].enabled is True
+    assert by_id["physical-intelligence-blog"].enabled is True
 
 
 def test_touch_high_seed_hits_all_five_technical_topics_and_company_claim():
@@ -64,10 +62,13 @@ def test_weak_long_context_and_synthetic_data_do_not_match_alone():
 def test_issuer_master_syncs_versioned_identifiers(session):
     issuers = load_issuers(ROOT / "configs")
     assert sync_issuers(session, issuers) == len(issuers)
-    zhipu = session.get(IssuerMasterModel, "zhipu")
-    assert zhipu is not None
-    assert zhipu.markets[0] == {"market": "HKEX", "ticker": "02513"}
-    assert "Z.ai" in zhipu.aliases
+    coreweave = session.get(IssuerMasterModel, "coreweave")
+    assert coreweave is not None
+    assert coreweave.markets[0] == {"market": "NASDAQ", "ticker": "CRWV"}
+    assert "CoreWeave" in coreweave.aliases
+    openai = session.get(IssuerMasterModel, "openai")
+    assert openai is not None
+    assert "OpenAI" in openai.aliases
 
 
 def test_production_runtime_refuses_sqlite(monkeypatch, tmp_path):

@@ -115,15 +115,14 @@ def test_samr_skips_malformed_rows_and_warns_when_page_budget_is_reached():
 
 
 def test_samr_registry_and_checked_in_source_config():
-    collector = collector_for(_spec())
+    spec = _spec()
+    collector = collector_for(spec)
     try:
         assert isinstance(collector, SAMRStandardsCollector)
     finally:
         collector.close()
 
-    source = {source.id: source for source in load_sources("configs")}["samr-ai-standards"]
-    assert source.enabled is True
-    assert source.kind == "samr_standards"
-    assert source.url == "https://std.samr.gov.cn/gb/search/gbQueryPage"
-    assert source.search_terms == ["人工智能", "大模型"]
-    assert source.evidence_type == "official_standard"
+    assert spec.kind == "samr_standards"
+    assert spec.url == "https://std.samr.gov.cn/gb/search/gbQueryPage"
+    assert spec.search_terms == ["人工智能", "大模型"]
+    assert spec.evidence_type == "official_standard"

@@ -1,26 +1,9 @@
 version: 1
 issuers:
-  # ================= Frontier AI Labs & Issuers =================
-  - id: zhipu
-    name_zh: 北京智谱华章科技股份有限公司
-    name_en: Knowledge Atlas Technology
-    aliases: [智谱, Z.ai, Zhipu AI, GLM]
-    ir_url: https://www1.hkexnews.hk/search/titlesearch.xhtml?category=0&lang=EN&market=SEHK&stockId=1000286748
-    markets: [{market: HKEX, ticker: "02513"}]
-    priority: pure_ai
-  - id: minimax
-    name_zh: MiniMax
-    name_en: MiniMax Group Inc.
-    aliases: [MiniMax, 海螺AI]
-    ir_url: https://ir.minimax.io/corporate-filings/announcements-circulars
-    exchange_disclosure_url: https://www1.hkexnews.hk/search/titlesearch.xhtml?category=0&lang=EN&market=SEHK&stockId=1000286746
-    markets: [{market: HKEX, ticker: "00100"}]
-    priority: pure_ai
-
-  # ================= Frontier AI Native Startups (Silicon Valley & Global) =================
+  # ================= Frontier AI Foundation Labs =================
   - id: openai
     name_en: OpenAI
-    aliases: [OpenAI, ChatGPT, GPT-4, GPT-5]
+    aliases: [OpenAI, ChatGPT, GPT-4, GPT-5, o1, o3]
     private: true
     priority: pure_ai
   - id: anthropic
@@ -33,6 +16,18 @@ issuers:
     aliases: [xAI, Grok, Grok 3]
     private: true
     priority: pure_ai
+  - id: mistral
+    name_en: Mistral AI
+    aliases: [Mistral, Mistral Large, Le Chat, Pixtral]
+    private: true
+    priority: pure_ai
+  - id: cohere
+    name_en: Cohere
+    aliases: [Cohere, Command R, Command R+]
+    private: true
+    priority: pure_ai
+
+  # ================= Hottest Silicon Valley & Global AI-Native Unicorn Startups =================
   - id: cognition
     name_en: Cognition AI
     aliases: [Cognition, Devin, Cognition AI]
@@ -73,31 +68,9 @@ issuers:
     aliases: [EvolutionaryScale, ESM, ESM3]
     private: true
     priority: pure_ai
-  - id: mistral
-    name_en: Mistral AI
-    aliases: [Mistral, Mistral Large, Le Chat]
-    private: true
-    priority: pure_ai
-  - id: cohere
-    name_en: Cohere
-    aliases: [Cohere, Command R]
-    private: true
-    priority: pure_ai
-  - id: deepseek
-    name_zh: 深度求索
-    name_en: DeepSeek
-    aliases: [DeepSeek, 深度求索, DeepSeek-R1, DeepSeek-V3]
-    private: true
-    priority: pure_ai
-  - id: moonshot
-    name_zh: 月之暗面
-    name_en: Moonshot AI
-    aliases: [Moonshot, Kimi, 月之暗面]
-    private: true
-    priority: pure_ai
   - id: prime_intellect
     name_en: Prime Intellect
-    aliases: [Prime Intellect, Decentralized Compute]
+    aliases: [Prime Intellect, Decentralized Compute, Prime]
     private: true
     priority: pure_ai
   - id: together_ai
@@ -160,6 +133,61 @@ issuers:
     aliases: [LlamaIndex]
     private: true
     priority: pure_ai
+  - id: replicate
+    name_en: Replicate
+    aliases: [Replicate]
+    private: true
+    priority: pure_ai
+  - id: runway
+    name_en: Runway
+    aliases: [Runway, Gen-2, Gen-3]
+    private: true
+    priority: pure_ai
+  - id: suno
+    name_en: Suno AI
+    aliases: [Suno, Suno AI]
+    private: true
+    priority: pure_ai
+  - id: baseten
+    name_en: Baseten
+    aliases: [Baseten]
+    private: true
+    priority: pure_ai
+  - id: cerebras
+    name_en: Cerebras Systems
+    aliases: [Cerebras, CS-3, WSE-3]
+    private: true
+    priority: pure_ai
+  - id: etched
+    name_en: Etched
+    aliases: [Etched, Sohu]
+    private: true
+    priority: pure_ai
+  - id: glean
+    name_en: Glean
+    aliases: [Glean]
+    private: true
+    priority: pure_ai
+  - id: character_ai
+    name_en: Character.ai
+    aliases: [Character.ai, Character AI]
+    private: true
+    priority: pure_ai
+  - id: sakana_ai
+    name_en: Sakana AI
+    aliases: [Sakana, Sakana AI]
+    private: true
+    priority: pure_ai
+  - id: hebbia
+    name_en: Hebbia
+    aliases: [Hebbia, Matrix]
+    private: true
+    priority: pure_ai
+  - id: factory_ai
+    name_en: Factory AI
+    aliases: [Factory, Factory AI, Droids]
+    private: true
+    priority: pure_ai
   - id: huggingface
     name_en: Hugging Face
     aliases: [Hugging Face, HuggingFace, HF]
@@ -183,7 +211,7 @@ issuers:
     private: true
     priority: pure_ai
 
-  # ================= AI Compute Platforms & Frontier Labs =================
+  # ================= AI Compute Platforms & Frontier Research Labs =================
   - id: alphabet
     name_en: Alphabet Inc.
     aliases: [Alphabet, Google, Google DeepMind, DeepMind]
