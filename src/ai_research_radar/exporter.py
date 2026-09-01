@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections import Counter
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -13,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from .config import load_issuers
 from .db import EventRevisionModel, RadarEventModel, SourceHealthModel, SourceModel, utcnow
+from .identity import normalize_content
 
 WEB_TOPICS = {
     "long_horizon",
@@ -138,6 +140,17 @@ def export_public_dataset(
     return dataset
 
 
+def _clean_prose(text: str | None) -> str:
+    if not text:
+        return ""
+    text = normalize_content(text)
+    text = re.sub(r"(?s)@[a-zA-Z0-9_-]+\s+[^{]+\{(?:[^{}]*\{[^{}]*\}[^{}]*|[^{}]*)*\}", " ", text)
+    for _ in range(2):
+        text = re.sub(r"(?s)(?:[.#@][a-zA-Z0-9_\-]+[a-zA-Z0-9_\-\.\#\:\s+>~,]*|[a-zA-Z0-9_\-]+\s*:)\s*\{[^{}]*\}", " ", text)
+        text = re.sub(r"\{[^{}]*:[^{}]*\}", " ", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
 def _public_event(session: Session, event: RadarEventModel, names: dict[str, str]) -> dict[str, Any]:
     revisions = session.scalars(
         select(EventRevisionModel)
@@ -201,12 +214,12 @@ def _public_event(session: Session, event: RadarEventModel, names: dict[str, str
             }
             for entity in event.entities
         ],
-        "title_zh": event.title_zh,
-        "summary_zh": event.summary_zh,
-        "why_it_matters": event.why_it_matters,
-        "change_summary": event.change_summary or "",
-        "key_quotes": key_quotes or [],
-        "deep_takeaway": deep_takeaway or "",
+        "title_zh": _clean_prose(event.title_zh),
+        "summary_zh": _clean_prose(event.summary_zh),
+        "why_it_matters": _clean_prose(event.why_it_matters),
+        "change_summary": _clean_prose(event.change_summary),
+        "key_quotes": [_clean_prose(q) for q in (key_quotes or []) if _clean_prose(q)],
+        "deep_takeaway": _clean_prose(deep_takeaway),
         "source_time": _iso(published),
         "published_at": _iso(published),
         "first_seen_at": _iso(event.first_seen_at),

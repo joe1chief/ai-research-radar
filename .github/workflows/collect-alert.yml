@@ -93,14 +93,14 @@ jobs:
           RADAR_DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
           LLM_API_KEY: ${{ secrets.DASHSCOPE_API_KEY }}
           ALPHAXIV_ACCESS_TOKEN: ${{ secrets.ALPHAXIV_ACCESS_TOKEN }}
-        run: uv run radar enrich --summary-limit 0
+        run: uv run radar enrich
       - name: Enrich new and materially changed items with YiCloud
         if: env.LLM_PROVIDER == 'yicloud'
         env:
           RADAR_DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
           LLM_API_KEY: ${{ secrets.YICLOUD_API_KEY }}
           ALPHAXIV_ACCESS_TOKEN: ${{ secrets.ALPHAXIV_ACCESS_TOKEN }}
-        run: uv run radar enrich --summary-limit 0
+        run: uv run radar enrich
       - name: Compose alert batch
         env:
           RADAR_DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}

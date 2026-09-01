@@ -554,11 +554,11 @@ def enrich_pending(
         else:
             event.entities = [item.entity_id] if item.entity_id else []
         event.cross_tags = match.cross_tags
-        event.title_zh = enhanced.title_zh if enhanced and enhanced.title_zh else item.title
-        event.summary_zh = (
+        event.title_zh = normalize_content(enhanced.title_zh if enhanced and enhanced.title_zh else item.title)
+        event.summary_zh = normalize_content(
             enhanced.summary_zh if enhanced and enhanced.summary_zh else (version.abstract_text or item.title)[:1200]
         )
-        event.why_it_matters = (
+        event.why_it_matters = normalize_content(
             enhanced.why_it_matters
             if enhanced and enhanced.why_it_matters
             else _fallback_why(topics, event_type)

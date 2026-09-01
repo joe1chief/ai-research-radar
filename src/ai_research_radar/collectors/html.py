@@ -40,6 +40,8 @@ class _LinkParser(HTMLParser):
 
 
 class _ArticleParser(HTMLParser):
+    IGNORE_TAGS = {"style", "script", "noscript", "svg", "header", "footer", "nav", "aside", "form", "button"}
+
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
         self.meta: dict[str, str] = {}
@@ -47,6 +49,7 @@ class _ArticleParser(HTMLParser):
         self.links: list[str] = []
         self.jsonld: list[str] = []
         self._capture_depth = 0
+        self._ignore_depth = 0
         self._script_jsonld = False
         self._script_parts: list[str] = []
         self._title = False
@@ -54,9 +57,11 @@ class _ArticleParser(HTMLParser):
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         values = {key.casefold(): value or "" for key, value in attrs}
+        if tag.casefold() in self.IGNORE_TAGS:
+            self._ignore_depth += 1
         if tag in {"article", "main"}:
             self._capture_depth += 1
-        elif self._capture_depth and tag in {"p", "h1", "h2", "h3", "li", "blockquote"}:
+        elif self._capture_depth and not self._ignore_depth and tag in {"p", "h1", "h2", "h3", "li", "blockquote", "div", "section"}:
             self.text_parts.append("\n")
         if tag == "meta":
             key = values.get("property") or values.get("name") or values.get("itemprop")
@@ -77,10 +82,12 @@ class _ArticleParser(HTMLParser):
             self._script_parts.append(data)
         elif self._title:
             self._title_parts.append(data)
-        if self._capture_depth:
+        if self._capture_depth and not self._ignore_depth:
             self.text_parts.append(data)
 
     def handle_endtag(self, tag: str) -> None:
+        if tag.casefold() in self.IGNORE_TAGS:
+            self._ignore_depth = max(0, self._ignore_depth - 1)
         if tag in {"article", "main"} and self._capture_depth:
             self._capture_depth -= 1
         elif tag == "script" and self._script_jsonld:

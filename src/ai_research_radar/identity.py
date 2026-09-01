@@ -19,14 +19,34 @@ TRACKING_KEYS = {
 }
 
 
+def strip_markup_and_css(value: str) -> str:
+    """Strip script/style/noscript/svg tags, CSS comments, and CSS rule blocks completely."""
+    if not value:
+        return ""
+    value = re.sub(r"(?is)<script\b[^>]*>.*?</script>", " ", value)
+    value = re.sub(r"(?is)<style\b[^>]*>.*?</style>", " ", value)
+    value = re.sub(r"(?is)<noscript\b[^>]*>.*?</noscript>", " ", value)
+    value = re.sub(r"(?is)<svg\b[^>]*>.*?</svg>", " ", value)
+    value = re.sub(r"(?s)/\*.*?\*/", " ", value)
+    value = re.sub(r"(?s)@[a-zA-Z0-9_-]+\s+[^{]+\{(?:[^{}]*\{[^{}]*\}[^{}]*|[^{}]*)*\}", " ", value)
+    for _ in range(2):
+        value = re.sub(
+            r"(?s)(?:[.#][a-zA-Z0-9_\-]+[a-zA-Z0-9_\-\.\#\:\s+>~,]*|[a-zA-Z0-9_\-]+\s*:[a-zA-Z0-9_\-]+)\s*\{[^{}]*\}",
+            " ",
+            value,
+        )
+    value = re.sub(r"<[^>]+>", " ", value)
+    return value
+
+
 def normalize_content(value: str) -> str:
     value = html.unescape(value or "")
+    value = strip_markup_and_css(value)
     value = unicodedata.normalize("NFKC", value)
     # PostgreSQL text values cannot contain NUL bytes. Treat them as word
     # boundaries so malformed upstream HTML cannot either break persistence or
     # silently join the surrounding words together.
     value = value.replace("\x00", " ")
-    value = re.sub(r"<[^>]+>", " ", value)
     return re.sub(r"\s+", " ", value).strip()
 
 
