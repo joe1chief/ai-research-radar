@@ -97,6 +97,22 @@ topics:
       - OWNERSHIP
       - REGULATORY_EXPORT
 
+  - id: podcast_culture
+    label_zh: 顶级播客与硅谷闲谈 / Podcasts & Culture
+    label_en: Podcasts & Tech Culture
+    hard_keywords:
+      - podcast
+      - interview
+      - episode
+      - founder talk
+      - deep dive conversation
+      - 播客
+      - 访谈
+      - 对话
+      - 专访
+      - 闲聊
+    boosters: [Dwarkesh, Lex Fridman, Latent Space, No Priors, All-In, 硅谷101, 晚点聊, 乱翻书, 42章经, 十字路口, 硬地骇客, Lenny]
+
 cross_tags:
   - agi_to_asi
   - scaling_agi

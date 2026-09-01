@@ -66,6 +66,13 @@ const TOPICS: Record<
     short: '产业资本',
     description: '融资、上市、并购、算力基础设施投入与监管披露。',
   },
+  podcast_culture: {
+    index: '06',
+    eyebrow: '播客与访谈',
+    title: '顶级播客与硅谷闲谈',
+    short: '播客访谈',
+    description: '精选国内外最高浓度 AI 深度播客、创始人对话、极客随笔与轻娱乐闲谈。',
+  },
 }
 
 const SECTION_IDS: TopicId[] = [
@@ -74,6 +81,7 @@ const SECTION_IDS: TopicId[] = [
   'self_evolving',
   'safety_governance',
   'industrial_capital',
+  'podcast_culture',
 ]
 
 function isInSection(event: RadarEvent, topicId: TopicId) {

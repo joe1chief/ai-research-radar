@@ -17,6 +17,7 @@ class Topic(StrEnum):
     MECHANISTIC_INTERPRETABILITY = "mechanistic_interpretability"
     SAFETY_GOVERNANCE = "safety_governance"
     INDUSTRIAL_CAPITAL = "industrial_capital"
+    PODCAST_CULTURE = "podcast_culture"
 
 
 class EventStatus(StrEnum):

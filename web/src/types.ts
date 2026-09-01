@@ -5,6 +5,7 @@ export const TOPIC_IDS = [
   'mechanistic_interpretability',
   'safety_governance',
   'industrial_capital',
+  'podcast_culture',
 ] as const
 
 export type TopicId = (typeof TOPIC_IDS)[number]

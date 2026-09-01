@@ -899,3 +899,138 @@ sources:
     detail_fetch_limit: 0
     max_items: 100
     enabled: true
+
+  # =========================================================================
+  # 8. Top Global & Chinese AI Podcasts & Tech Culture (轻娱乐与深度对谈)
+  # =========================================================================
+  - id: dwarkesh-podcast
+    entity_id: media_dwarkesh
+    group: tech
+    kind: rss
+    url: https://www.dwarkeshpatel.com/feed
+    fetch_strategy: rss
+    cadence: four_hour
+    evidence_type: reputable_media
+    parser: rss
+    enabled: true
+
+  - id: latent-space-podcast
+    entity_id: media_latent_space
+    group: tech
+    kind: rss
+    url: https://www.latent.space/feed
+    fetch_strategy: rss
+    cadence: four_hour
+    evidence_type: reputable_media
+    parser: rss
+    enabled: true
+
+  - id: lex-fridman-podcast
+    entity_id: media_lex_fridman
+    group: tech
+    kind: rss
+    url: https://lexfridman.com/feed/podcast/
+    fetch_strategy: rss
+    cadence: four_hour
+    evidence_type: reputable_media
+    parser: rss
+    enabled: true
+
+  - id: no-priors-podcast
+    entity_id: media_no_priors
+    group: tech
+    kind: rss
+    url: https://feeds.simplecast.com/7xQx7W6y
+    fetch_strategy: rss
+    cadence: four_hour
+    evidence_type: reputable_media
+    parser: rss
+    enabled: true
+
+  - id: simon-willison-blog
+    entity_id: media_simon_willison
+    group: tech
+    kind: rss
+    url: https://simonwillison.net/atom/everything/
+    fetch_strategy: rss
+    cadence: four_hour
+    evidence_type: reputable_media
+    parser: atom
+    enabled: true
+
+  - id: interconnects-blog
+    entity_id: media_interconnects
+    group: tech
+    kind: rss
+    url: https://www.interconnects.ai/feed
+    fetch_strategy: rss
+    cadence: four_hour
+    evidence_type: reputable_media
+    parser: rss
+    enabled: true
+
+  - id: sv101-podcast
+    entity_id: media_sv101
+    group: tech
+    kind: rss
+    url: https://feed.xyzfm.space/u6s53u8tq90t
+    fetch_strategy: rss
+    cadence: four_hour
+    evidence_type: reputable_media
+    parser: rss
+    enabled: true
+
+  - id: latetalk-podcast
+    entity_id: media_latepost
+    group: tech
+    kind: rss
+    url: https://feed.xyzfm.space/n25rtdy8f760
+    fetch_strategy: rss
+    cadence: four_hour
+    evidence_type: reputable_media
+    parser: rss
+    enabled: true
+
+  - id: luanfanshu-podcast
+    entity_id: media_luanfanshu
+    group: tech
+    kind: rss
+    url: https://feed.xyzfm.space/8p0c7g7b282p
+    fetch_strategy: rss
+    cadence: four_hour
+    evidence_type: reputable_media
+    parser: rss
+    enabled: true
+
+  - id: fortytwo-capital-podcast
+    entity_id: media_42capital
+    group: tech
+    kind: rss
+    url: https://feed.xyzfm.space/7b32w91z7290
+    fetch_strategy: rss
+    cadence: four_hour
+    evidence_type: reputable_media
+    parser: rss
+    enabled: true
+
+  - id: crossing-podcast
+    entity_id: media_crossing
+    group: tech
+    kind: rss
+    url: https://feed.xyzfm.space/x5v8p87r6w12
+    fetch_strategy: rss
+    cadence: four_hour
+    evidence_type: reputable_media
+    parser: rss
+    enabled: true
+
+  - id: hardcore-hacker-podcast
+    entity_id: media_hardcore_hacker
+    group: tech
+    kind: rss
+    url: https://hardcorehacker.com/feed.xml
+    fetch_strategy: rss
+    cadence: four_hour
+    evidence_type: reputable_media
+    parser: rss
+    enabled: true
