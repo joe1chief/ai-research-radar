@@ -1,6 +1,6 @@
 version: 1
 defaults:
-  timeout_seconds: 30
+  timeout_seconds: 12
   cadence: daily
   cursor_strategy: etag_last_modified
   detail_fetch_limit: 12
