@@ -44,7 +44,25 @@ def export_public_dataset(
         ).order_by(RadarEventModel.source_time.desc(), RadarEventModel.score.desc())
     ).all()
     names = _entity_names(config_dir)
-    all_events = [_public_event(session, event, names) for event in all_rows]
+    event_ids = [event.id for event in all_rows]
+    revisions_by_event: dict[str, list[EventRevisionModel]] = {}
+    if event_ids:
+        # Batch load all material revisions in 1 query instead of 2000+ separate round trips
+        all_revisions = session.scalars(
+            select(EventRevisionModel)
+            .where(
+                EventRevisionModel.event_id.in_(event_ids),
+                EventRevisionModel.is_material.is_(True),
+            )
+            .order_by(EventRevisionModel.event_id, EventRevisionModel.revision_no.asc())
+        ).all()
+        for rev in all_revisions:
+            revisions_by_event.setdefault(rev.event_id, []).append(rev)
+
+    all_events = [
+        _public_event(event, revisions_by_event.get(event.id, []), names)
+        for event in all_rows
+    ]
 
     # Compute lineage / related events for each event
     for event in all_events:
@@ -151,15 +169,11 @@ def _clean_prose(text: str | None) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
-def _public_event(session: Session, event: RadarEventModel, names: dict[str, str]) -> dict[str, Any]:
-    revisions = session.scalars(
-        select(EventRevisionModel)
-        .where(
-            EventRevisionModel.event_id == event.id,
-            EventRevisionModel.is_material.is_(True),
-        )
-        .order_by(EventRevisionModel.revision_no.asc())
-    ).all()
+def _public_event(
+    event: RadarEventModel,
+    revisions: list[EventRevisionModel],
+    names: dict[str, str],
+) -> dict[str, Any]:
     revision = revisions[-1] if revisions else None
     snapshot = revision.snapshot if revision else {}
     published = event.source_time or event.first_seen_at
