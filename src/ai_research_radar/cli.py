@@ -105,7 +105,11 @@ def _print(payload: object) -> None:
 
 
 def _raw_store(settings: Settings) -> RawSnapshotStore | None:
-    if not settings.supabase_url or not settings.supabase_secret_key:
+    if (
+        not settings.raw_storage_enabled
+        or not settings.supabase_url
+        or not settings.supabase_secret_key
+    ):
         return None
     return RawSnapshotStore(
         supabase_url=settings.supabase_url,

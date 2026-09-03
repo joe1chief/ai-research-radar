@@ -56,7 +56,7 @@ class HuggingFaceModelsCollector(BaseCollector):
             sha = str(item.metadata.get("sha") or "main")
             raw_url = f"{item.canonical_url}/raw/{sha}/README.md"
             try:
-                detail = self.request({}, url=raw_url)
+                detail = self.request({}, url=raw_url, timeout=6.0)
                 if len(detail.content) <= 512_000:
                     item.content = detail.text[:100_000]
                     item.metadata["model_card_url"] = raw_url

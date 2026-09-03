@@ -122,6 +122,7 @@ class BaseCollector(ABC):
         method: str = "GET",
         data: dict[str, Any] | None = None,
         extra_headers: dict[str, str] | None = None,
+        timeout: float | None = None,
     ) -> httpx.Response:
         cursor = cursor or {}
         # Apply the collector-scoped identity even when a caller supplies a
@@ -150,6 +151,7 @@ class BaseCollector(ABC):
                     data=data,
                     headers=headers,
                     url=url or self.spec.url,
+                    timeout=timeout,
                 )
             except httpx.TransportError as exc:
                 self.last_http_status = None
@@ -217,19 +219,25 @@ class BaseCollector(ABC):
         data: dict[str, Any] | None,
         headers: dict[str, str],
         url: str,
+        timeout: float | None = None,
     ) -> httpx.Response:
         original_host = (urlsplit(url).hostname or "").lower()
         last_redirect_status: int | None = None
         for redirect_count in range(6):
             if self.request_throttle is not None:
                 self.request_throttle(url)
+            request_kwargs: dict[str, Any] = {
+                "params": params if redirect_count == 0 else None,
+                "data": data if method == "POST" else None,
+                "headers": headers,
+                "follow_redirects": False,
+            }
+            if timeout is not None:
+                request_kwargs["timeout"] = timeout
             response = self.client.request(
                 method,
                 url,
-                params=params if redirect_count == 0 else None,
-                data=data if method == "POST" else None,
-                headers=headers,
-                follow_redirects=False,
+                **request_kwargs,
             )
             if response.status_code not in {301, 302, 303, 307, 308}:
                 return response

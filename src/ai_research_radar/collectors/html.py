@@ -145,7 +145,7 @@ class HtmlListingCollector(BaseCollector):
                 next_cursor["detail_offset"] = (offset + len(rotating)) % len(rotating_pool)
             for item in selected:
                 try:
-                    detail_response = self.request({}, url=item.canonical_url)
+                    detail_response = self.request({}, url=item.canonical_url, timeout=6.0)
                     if "html" not in detail_response.headers.get("content-type", "text/html"):
                         continue
                     enriched[item.canonical_url] = _detail_item(

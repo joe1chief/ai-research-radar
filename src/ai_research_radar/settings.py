@@ -126,6 +126,7 @@ class Settings(BaseSettings):
     supabase_url: str | None = Field(None, alias="SUPABASE_URL")
     supabase_secret_key: str | None = Field(None, alias="SUPABASE_SECRET_KEY")
     raw_storage_bucket: str = Field("radar-raw", alias="RADAR_RAW_STORAGE_BUCKET")
+    raw_storage_enabled: bool = Field(False, alias="RADAR_RAW_STORAGE_ENABLED")
     raw_snapshot_max_bytes: int = Field(
         5 * 1024 * 1024, alias="RADAR_RAW_SNAPSHOT_MAX_BYTES"
     )
