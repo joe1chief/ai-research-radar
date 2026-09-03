@@ -979,3 +979,47 @@ sources:
     evidence_type: reputable_media
     parser: rss
     enabled: true
+
+  - id: twiml-ai-podcast
+    entity_id: media_twiml_ai
+    group: tech
+    kind: rss
+    url: https://twimlai.com/feed/podcast/
+    fetch_strategy: rss
+    cadence: four_hour
+    evidence_type: reputable_media
+    parser: rss
+    enabled: true
+
+  - id: practical-ai-podcast
+    entity_id: media_practical_ai
+    group: tech
+    kind: rss
+    url: https://changelog.com/practicalai/feed
+    fetch_strategy: rss
+    cadence: four_hour
+    evidence_type: reputable_media
+    parser: rss
+    enabled: true
+
+  - id: crazy-capital-podcast
+    entity_id: media_crazy_capital
+    group: tech
+    kind: rss
+    url: https://crazy.capital/feed
+    fetch_strategy: rss
+    cadence: four_hour
+    evidence_type: reputable_media
+    parser: rss
+    enabled: true
+
+  - id: changelog-podcast
+    entity_id: media_changelog
+    group: tech
+    kind: rss
+    url: https://changelog.com/podcast/feed
+    fetch_strategy: rss
+    cadence: four_hour
+    evidence_type: reputable_media
+    parser: rss
+    enabled: true
