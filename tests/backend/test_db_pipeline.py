@@ -44,6 +44,8 @@ def test_postgres_cluster_candidate_sql_uses_table_owned_float_array():
         event_id="event-current",
         event_type="PAPER",
         threshold=datetime(2026, 8, 1, tzinfo=UTC),
+        embedding=[1.0, 0.0],
+        embedding_space="test-space",
     )
 
     compiled = str(statement.compile(dialect=postgresql.dialect()))
@@ -53,6 +55,10 @@ def test_postgres_cluster_candidate_sql_uses_table_owned_float_array():
     assert "<=>" not in compiled
     assert "eligible_cluster_events" in compiled
     assert "events.first_seen_at" in compiled
+    assert "unnest" in compiled
+    assert "LIMIT" in compiled
+    assert "abstract_text" not in compiled
+    assert "normalized_text" not in compiled
 
 
 def test_cluster_candidate_query_bounds_history_and_uses_latest_primary(session):
@@ -128,6 +134,9 @@ def test_cluster_candidate_query_bounds_history_and_uses_latest_primary(session)
             event_id="different-event",
             event_type=event.event_type,
             threshold=now - timedelta(days=14),
+            embedding=[1.0, *([0.0] * 1023)],
+            embedding_space="test-space",
+            dialect_name="sqlite",
         )
     ).all()
     assert len(rows) == 1
@@ -138,6 +147,9 @@ def test_cluster_candidate_query_bounds_history_and_uses_latest_primary(session)
             event_id="different-event",
             event_type=event.event_type,
             threshold=now + timedelta(seconds=1),
+            embedding=[1.0, *([0.0] * 1023)],
+            embedding_space="test-space",
+            dialect_name="sqlite",
         )
     ).all()
     assert expired == []

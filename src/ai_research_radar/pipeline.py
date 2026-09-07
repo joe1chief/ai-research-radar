@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import math
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime, timedelta
@@ -11,7 +12,8 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 import httpx
-from sqlalchemy import func, or_, select
+from sqlalchemy import JSON, Float, String, Text, case, cast, func, literal, or_, select
+from sqlalchemy.dialects.postgresql import ARRAY, DOUBLE_PRECISION
 from sqlalchemy.orm import Session
 
 from .collectors import UnsupportedCollectorError, collector_for
@@ -33,7 +35,7 @@ from .db import (
     sync_source,
     utcnow,
 )
-from .dedupe import ClusterDecision, change_summary, cluster_decision, cosine_similarity
+from .dedupe import ClusterDecision, change_summary, cluster_decision
 from .identity import canonicalize_url, content_hash, normalize_content, stable_id
 from .llm import QwenClient, deterministic_embedding
 from .raw_storage import RawSnapshotStore
@@ -991,56 +993,19 @@ def _choose_cluster(
     item_text: str,
 ) -> tuple[str, bool, str | None]:
     threshold = utcnow() - timedelta(days=14)
-    candidate_rows = session.execute(
+    candidates = session.execute(
         _cluster_candidate_query(
             event_id=event_id,
             event_type=event_type,
             threshold=threshold,
+            embedding=embedding,
+            embedding_space=embedding_space,
+            dialect_name=session.get_bind().dialect.name,
         )
     ).all()
-    ranked_candidates: list[
-        tuple[
-            float,
-            RadarEventModel,
-            str,
-            str | None,
-            str | None,
-        ]
-    ] = []
-    for (
-        candidate,
-        linked_title,
-        linked_abstract,
-        linked_normalized,
-        linked_embedding,
-        linked_metadata,
-    ) in candidate_rows:
-        if not linked_embedding:
-            continue
-        if (linked_metadata or {}).get("embedding_space") != embedding_space:
-            continue
-        similarity = cosine_similarity(embedding, linked_embedding)
-        ranked_candidates.append(
-            (
-                similarity,
-                candidate,
-                linked_title,
-                linked_abstract,
-                linked_normalized,
-            )
-        )
-
-    # pgvector previously applied this bound while ordering with `<=>`. Keep
-    # the same nearest-neighbour budget, but rank the table-owned float4[]
-    # values in Python so the runtime role needs no extension-schema access.
-    ranked_candidates.sort(key=lambda row: row[0], reverse=True)
-    for (
-        similarity,
-        candidate,
-        linked_title,
-        linked_abstract,
-        linked_normalized,
-    ) in ranked_candidates[:80]:
+    for candidate in candidates:
+        similarity = candidate.similarity
+        linked_title = candidate.title
         if (
             event_type != "PAPER"
             and item.entity_id
@@ -1061,6 +1026,12 @@ def _choose_cluster(
         )
         should_merge = decision == ClusterDecision.MERGE
         if decision == ClusterDecision.LLM_REVIEW and qwen is not None:
+            # Most candidates need no model adjudication. Fetch large text fields
+            # only for the exact version selected by the ranking query.
+            linked_abstract, linked_normalized = session.execute(
+                select(ItemVersionModel.abstract_text, ItemVersionModel.normalized_text)
+                .where(ItemVersionModel.id == candidate.version_id)
+            ).one()
             candidate_text = (
                 f"{linked_title}\n{linked_abstract or ''}\n{linked_normalized or ''}"
             )
@@ -1071,20 +1042,65 @@ def _choose_cluster(
     return event_id, False, None
 
 
+def _cluster_similarity(embedding_column, embedding: list[float], dialect_name: str):
+    """Compute cosine from the authoritative float array without pgvector access.
+
+    SQLite stores FloatArray as JSON; its local/offline path uses the same SQL
+    ranking and candidate budget. Both backends promote arithmetic to double
+    precision, matching Python arithmetic on the stored float values.
+    """
+    query_norm = math.sqrt(sum(value * value for value in embedding))
+    if dialect_name == "postgresql":
+        values = func.unnest(
+            # psycopg's default text protocol decodes REAL[] using its printed
+            # decimals. Parse the same representation before doing double
+            # arithmetic; a direct REAL[] -> double[] cast changes boundary
+            # scores compared with the previous Python ranking.
+            cast(cast(embedding_column, Text), ARRAY(DOUBLE_PRECISION)),
+            literal(embedding, type_=ARRAY(DOUBLE_PRECISION)),
+        ).table_valued("candidate_value", "query_value").render_derived()
+        left = values.c.candidate_value
+        right = values.c.query_value
+        length = func.cardinality(embedding_column)
+    elif dialect_name == "sqlite":
+        values = func.json_each(embedding_column).table_valued("key", "value")
+        left = cast(values.c.value, Float)
+        right = cast(func.json_extract(
+            literal(embedding, type_=JSON),
+            literal("$[") + cast(values.c.key, String) + literal("]"),
+        ), Float)
+        length = func.json_array_length(embedding_column)
+    else:
+        raise ValueError(f"Unsupported clustering database dialect: {dialect_name}")
+    cosine = select(
+        func.coalesce(
+            func.sum(left * right)
+            / func.nullif(func.sqrt(func.sum(left * left)) * query_norm, 0.0),
+            0.0,
+        )
+    ).select_from(values).correlate(embedding_column.table).scalar_subquery()
+    # Legacy cosine_similarity returns zero for unequal dimensions or zero
+    # vectors. Empty candidate vectors were excluded before sorting.
+    similarity = case((length != len(embedding), 0.0), else_=cosine)
+    return similarity, length
+
+
 def _cluster_candidate_query(
     *,
     event_id: str,
     event_type: str,
     threshold: datetime,
+    embedding: list[float],
+    embedding_space: str,
+    dialect_name: str = "postgresql",
 ):
-    """Return recent root events with their latest primary float-array embedding.
+    """Rank recent roots in the database and return at most 80 small rows.
 
-    The query deliberately selects ``item_versions.embedding`` rather than the
-    pgvector mirror column. Similarity ordering remains a Python concern, which
-    keeps the runtime path independent of operators and functions in the
-    PostgreSQL extensions schema.
+    Use item_versions.embedding, not its pgvector mirror, so the runtime role
+    needs no extension-schema privileges. Choose the latest primary version
+    before testing embedding eligibility; an older valid version must not
+    replace an ineligible latest version.
     """
-
     eligible_events = (
         select(RadarEventModel.id.label("event_id"))
         .where(
@@ -1098,48 +1114,44 @@ def _cluster_candidate_query(
     latest_primary = (
         select(
             EventItemModel.event_id.label("event_id"),
+            ItemVersionModel.id.label("version_id"),
             ItemVersionModel.title.label("title"),
-            ItemVersionModel.abstract_text.label("abstract_text"),
-            ItemVersionModel.normalized_text.label("normalized_text"),
             ItemVersionModel.embedding.label("embedding"),
-            ItemVersionModel.metadata_json.label("metadata"),
+            ItemVersionModel.metadata_json["embedding_space"].as_string().label("embedding_space"),
             func.row_number()
             .over(
                 partition_by=EventItemModel.event_id,
-                order_by=(
-                    ItemVersionModel.fetched_at.desc(),
-                    ItemVersionModel.id.desc(),
-                ),
+                order_by=(ItemVersionModel.fetched_at.desc(), ItemVersionModel.id.desc()),
             )
             .label("version_rank"),
         )
         .select_from(EventItemModel)
-        .join(
-            eligible_events,
-            eligible_events.c.event_id == EventItemModel.event_id,
-        )
-        .join(
-            ItemVersionModel,
-            ItemVersionModel.id == EventItemModel.item_version_id,
-        )
+        .join(eligible_events, eligible_events.c.event_id == EventItemModel.event_id)
+        .join(ItemVersionModel, ItemVersionModel.id == EventItemModel.item_version_id)
         .where(EventItemModel.relation == "primary")
         .subquery("latest_primary_item_version")
     )
+    similarity, length = _cluster_similarity(latest_primary.c.embedding, embedding, dialect_name)
+    # Entity checks and same-title PAPER promotion intentionally remain after
+    # top-80 selection in _choose_cluster, preserving the existing semantics.
     return (
         select(
-            RadarEventModel,
+            RadarEventModel.id,
+            RadarEventModel.cluster_id,
+            RadarEventModel.entities,
+            RadarEventModel.source_type,
+            latest_primary.c.version_id,
             latest_primary.c.title,
-            latest_primary.c.abstract_text,
-            latest_primary.c.normalized_text,
-            latest_primary.c.embedding,
-            latest_primary.c.metadata,
+            similarity.label("similarity"),
         )
         .join(latest_primary, latest_primary.c.event_id == RadarEventModel.id)
         .where(
             latest_primary.c.version_rank == 1,
-            latest_primary.c.embedding.is_not(None),
+            latest_primary.c.embedding_space == embedding_space,
+            length > 0,
         )
-        .order_by(RadarEventModel.id)
+        .order_by(similarity.desc(), RadarEventModel.id)
+        .limit(80)
     )
 
 

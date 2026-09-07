@@ -34,6 +34,35 @@ jobs:
       - run: python infra/scripts/validate-infra.py
       - run: bash -n infra/scripts/validate-runtime-env.sh
 
+  backend-postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      RADAR_TEST_POSTGRES_URL: postgresql+psycopg://postgres@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - run: uv sync --locked --all-extras
+      - run: uv run pytest tests/integration -q
+
   web:
     runs-on: ubuntu-latest
     timeout-minutes: 20
