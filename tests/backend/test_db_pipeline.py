@@ -926,7 +926,7 @@ def test_collection_recovers_after_invalidated_source_transaction(tmp_path, monk
         assert stats.changed == 1
         failed_health = active_session.get(SourceHealthModel, bad.id)
         assert failed_health.status == "failing"
-        assert "simulated database disconnect" in failed_health.last_error
+        assert "error_type=RuntimeError" in failed_health.last_error
         assert active_session.get(SourceHealthModel, good.id).status == "healthy"
         assert active_session.scalar(select(func.count()).select_from(ItemModel)) == 1
     engine.dispose()
@@ -1098,6 +1098,7 @@ def test_postgres_engine_pre_pings_connections(monkeypatch):
         return sentinel
 
     monkeypatch.setattr("ai_research_radar.db.create_engine", fake_create_engine)
+    monkeypatch.setattr("ai_research_radar.db.event.listen", lambda *args: None)
 
     engine = create_db_engine("postgresql+psycopg://runtime:password@example.invalid/radar")
 

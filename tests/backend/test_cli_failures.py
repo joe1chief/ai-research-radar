@@ -14,6 +14,24 @@ from ai_research_radar.pipeline import CollectionStats
 from ai_research_radar.settings import get_settings
 
 
+def test_collect_prints_budget_summary_and_exits_nonzero(tmp_path, monkeypatch):
+    settings, factory = _runtime(tmp_path)
+    monkeypatch.setattr(cli, "_runtime", lambda: (settings, factory))
+    monkeypatch.setattr(cli, "load_sources", lambda _: [])
+    seen = {}
+
+    def collect(*args, **kwargs):
+        seen.update(kwargs)
+        return CollectionStats(sources=2, failed=1, budget_exhausted=1)
+
+    monkeypatch.setattr(cli, "collect_group", collect)
+    result = CliRunner().invoke(cli.app, ["collect", "--group", "tech"])
+    assert result.exit_code == 1
+    assert '"budget_exhausted": 1' in result.stdout
+    assert seen["source_budget_seconds"] == settings.collect_source_budget_seconds
+    assert seen["group_budget_seconds"] == settings.collect_group_budget_seconds
+
+
 def _runtime(tmp_path):
     engine = create_db_engine(f"sqlite:///{tmp_path / 'radar.db'}")
     init_schema(engine)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import time
 from datetime import UTC, date, datetime, timedelta
 from enum import StrEnum
@@ -48,6 +49,18 @@ from .topics import RuleTopicClassifier
 app = typer.Typer(help="Incremental AI research and industry intelligence radar.", no_args_is_help=True)
 
 
+@app.callback()
+def configure_logging() -> None:
+    # StreamHandler flushes each message; do not log requests, secrets or bodies.
+    logging.basicConfig(
+        level=logging.WARNING, format="%(asctime)s %(levelname)s %(name)s %(message)s"
+    )
+    logging.getLogger("ai_research_radar").setLevel(logging.INFO)
+    # HTTPX INFO includes the full URL, including sensitive query parameters.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
+
+
 class SourceGroup(StrEnum):
     PAPERS = "papers"
     TECH = "tech"
@@ -87,16 +100,26 @@ def _backfill_cursor_payload(
 
 def _runtime() -> tuple[Settings, object]:
     settings = get_settings()
-    engine = create_db_engine(settings.database_url)
+    logger = logging.getLogger(__name__)
+    logger.info("runtime stage: stage=database_engine")
+    engine = create_db_engine(
+        settings.database_url,
+        connect_timeout_seconds=settings.db_connect_timeout_seconds,
+        statement_timeout_seconds=settings.db_statement_timeout_seconds,
+        lock_timeout_seconds=settings.db_lock_timeout_seconds,
+    )
+    logger.info("runtime stage: stage=schema_check")
     if settings.app_env == "production" and engine.dialect.name != "postgresql":
         raise RuntimeError("APP_ENV=production requires a PostgreSQL/Supabase database")
     if engine.dialect.name == "sqlite":
         init_schema(engine)
     else:
         validate_production_schema(engine)
+    logger.info("runtime stage: stage=issuer_sync")
     factory = session_factory(engine)
     with session_scope(factory) as session:
         sync_issuers(session, load_issuers(settings.config_dir))
+    logger.info("runtime stage: stage=ready")
     return settings, factory
 
 
@@ -298,6 +321,9 @@ def collect(
                 user_agent=settings.user_agent,
                 sec_user_agent=settings.sec_user_agent,
                 force=force,
+                source_budget_seconds=settings.collect_source_budget_seconds,
+                group_budget_seconds=settings.collect_group_budget_seconds,
+                recovery_budget_seconds=settings.collect_recovery_budget_seconds,
                 github_token=settings.github_token,
                 openreview_access_token=settings.openreview_access_token,
                 raw_store=raw_store,
@@ -305,7 +331,8 @@ def collect(
     finally:
         if raw_store is not None:
             raw_store.close()
-    if stats.sources > 0 and stats.failed == stats.sources:
+    _print(stats.to_dict())
+    if stats.budget_exhausted or (stats.sources > 0 and stats.failed == stats.sources):
         raise typer.Exit(code=1)
 
 
@@ -404,6 +431,8 @@ def deliver() -> None:
         client = AgentMailClient(
             api_key=settings.agentmail_api_key,
             inbox_id=settings.agentmail_inbox_id,
+            timeout_seconds=settings.agentmail_timeout_seconds,
+            retry_budget_seconds=settings.agentmail_retry_budget_seconds,
         )
     elif settings.delivery_mode == "live" and not settings.dry_run:
         if not settings.agentmail_api_key or not settings.agentmail_inbox_id:
@@ -428,6 +457,8 @@ def reconcile() -> None:
         client = AgentMailClient(
             api_key=settings.agentmail_api_key,
             inbox_id=settings.agentmail_inbox_id,
+            timeout_seconds=settings.agentmail_timeout_seconds,
+            retry_budget_seconds=settings.agentmail_retry_budget_seconds,
         )
     with session_scope(factory) as session:
         mode = "shadow" if settings.dry_run else settings.delivery_mode
@@ -509,6 +540,9 @@ def backfill(days: int = typer.Option(14, min=1, max=90)) -> None:
                     user_agent=settings.user_agent,
                     sec_user_agent=settings.sec_user_agent,
                     force=True,
+                    source_budget_seconds=settings.collect_source_budget_seconds,
+                    group_budget_seconds=settings.collect_group_budget_seconds,
+                    recovery_budget_seconds=settings.collect_recovery_budget_seconds,
                     github_token=settings.github_token,
                     openreview_access_token=settings.openreview_access_token,
                     raw_store=raw_store,

@@ -54,6 +54,54 @@ webhook events:
 
 ## Source failures
 
+### Collection and database budgets
+
+Radar emits flushed INFO logs for runtime setup, source fetch/persistence/commit,
+HTTP attempts and redirects, retry waits, and ingestion progress every 100 items.
+HTTPX/httpcore INFO logs are suppressed because they can expose full request URLs.
+The collection command also prints its final counts, including `budget_exhausted`.
+
+The default source budget is 120 seconds and each group has a 600-second budget.
+These conservative starting limits leave room inside the existing 45/60/90-minute
+job limits; they are not measured production SLOs or a guarantee of on-time email.
+Configure `RADAR_COLLECT_SOURCE_BUDGET_SECONDS` and
+`RADAR_COLLECT_GROUP_BUDGET_SECONDS`; a source may override its budget with the
+positive `collection_budget_seconds` field in `configs/sources.yml`. Monitor paper
+batch sizes and ingestion progress before increasing a repeatedly exhausted source.
+The production workflows forward matching repository variables to these settings;
+their cron expressions, shared writer group and job timeouts are unchanged.
+
+The same monotonic budget covers request attempts, streamed response chunks,
+redirects, domain throttling, page intervals, and persistence boundaries. Checks
+are cooperative: a running parser, socket phase or commit must return before the
+next check, so this is not a hard process-kill timer. Database defaults are a
+10-second libpq connect timeout, 30-second statement timeout and 5-second lock
+timeout, configured via `RADAR_DB_*_TIMEOUT_SECONDS` in `.env.example`. SQL limits
+are transaction-local, and active collection statements use the smaller remaining
+source budget. These settings do not bound every OS/network failure or provide a
+strict deadline for COMMIT. Inspect commit-stage logs before replaying uncertain work.
+
+A source budget failure rolls back its batch without advancing its cursor, then
+records failure health outside the expired budget so healthy sources can continue.
+This recovery has a separate 10-second cooperative grace budget, configurable
+with `RADAR_COLLECT_RECOVERY_BUDGET_SECONDS`; if health persistence also fails,
+the transaction is rolled back and its source ID/error class are logged.
+An exhausted group stops launching more sources and makes `radar collect` fail.
+Valid numeric or HTTP-date `Retry-After` values are never shortened to fit a budget:
+the source is deferred instead, and `source_health.metadata.retry_not_before`
+prevents even `--force` from requesting it early. No partial-page cursor is committed.
+
+AgentMail uses a 20-second request timeout and a 90-second operation retry budget
+(`RADAR_AGENTMAIL_TIMEOUT_SECONDS`, `RADAR_AGENTMAIL_RETRY_BUDGET_SECONDS`). Every
+SDK call has `max_retries=0`; only the adapter retries safe operations and explicit
+429 rejections. Ambiguous sends, including 408/409/5xx, remain `unknown` for
+reconciliation. A long Retry-After ends the current operation without sleeping or
+making an early request; do not manually replay it before the provider permits.
+
+For local checks use `pytest tests/backend`; for real database timeout/rollback
+checks set `RADAR_TEST_POSTGRES_URL` to an isolated PostgreSQL database and run
+`pytest tests/integration`. Never use production credentials for these tests.
+
 A source failure is isolated. After three consecutive failures, record a
 degraded source-health state. The nightly job prints the exact failed-source
 list and exits non-zero so GitHub Actions raises the operational notification;

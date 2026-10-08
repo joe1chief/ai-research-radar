@@ -6,6 +6,7 @@ import gzip
 import re
 from datetime import UTC, date, datetime
 from urllib.parse import quote
+from .limits import Deadline, read_response
 
 import httpx
 
@@ -44,6 +45,7 @@ class RawSnapshotStore:
         content_hash: str,
         payload: bytes,
         fetched_at: datetime,
+        deadline: Deadline | None = None,
     ) -> str | None:
         if not payload or len(payload) > self.max_bytes:
             return None
@@ -53,20 +55,28 @@ class RawSnapshotStore:
             f"{content_hash}.html.gz"
         )
         compressed = gzip.compress(payload, compresslevel=6, mtime=0)
+        timeout = min(30, deadline.remaining("raw_upload")) if deadline else 30
         url = (
             f"{self.base_url}/storage/v1/object/{quote(self.bucket, safe='')}/"
             f"{quote(path, safe='/')}"
         )
-        response = self.client.post(
+        with self.client.stream(
+            "POST",
             url,
             content=compressed,
+            timeout=timeout,
             headers={
                 **self._auth_headers,
                 "content-type": "application/gzip",
                 "x-upsert": "false",
                 "cache-control": "private, max-age=0, no-store",
             },
-        )
+        ) as streamed:
+            response = (
+                read_response(streamed, deadline, "raw_upload_response") if deadline else streamed
+            )
+            if deadline is None:
+                response.read()
         # A deterministic object path makes an already-existing snapshot a
         # successful idempotent replay rather than a collection failure.
         if response.status_code != 409:
