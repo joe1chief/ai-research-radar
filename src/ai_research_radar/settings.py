@@ -41,6 +41,28 @@ class Settings(BaseSettings):
         "AIResearchRadar/0.1 contact=you@example.com", alias="RADAR_USER_AGENT"
     )
     sec_user_agent: str | None = Field(None, alias="SEC_USER_AGENT")
+    collect_source_budget_seconds: float = Field(
+        120, alias="RADAR_COLLECT_SOURCE_BUDGET_SECONDS", gt=0, le=3600
+    )
+    collect_group_budget_seconds: float = Field(
+        600, alias="RADAR_COLLECT_GROUP_BUDGET_SECONDS", gt=0, le=3600
+    )
+    collect_recovery_budget_seconds: float = Field(
+        10, alias="RADAR_COLLECT_RECOVERY_BUDGET_SECONDS", gt=0, le=120
+    )
+    db_connect_timeout_seconds: int = Field(
+        10, alias="RADAR_DB_CONNECT_TIMEOUT_SECONDS", ge=1, le=120
+    )
+    db_statement_timeout_seconds: float = Field(
+        30, alias="RADAR_DB_STATEMENT_TIMEOUT_SECONDS", gt=0, le=300
+    )
+    db_lock_timeout_seconds: float = Field(5, alias="RADAR_DB_LOCK_TIMEOUT_SECONDS", gt=0, le=120)
+    agentmail_timeout_seconds: float = Field(
+        20, alias="RADAR_AGENTMAIL_TIMEOUT_SECONDS", gt=0, le=120
+    )
+    agentmail_retry_budget_seconds: float = Field(
+        90, alias="RADAR_AGENTMAIL_RETRY_BUDGET_SECONDS", gt=0, le=600
+    )
 
     llm_provider: Literal["dashscope", "yicloud"] = Field(
         "dashscope", alias="LLM_PROVIDER"

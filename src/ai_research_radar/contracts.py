@@ -67,6 +67,7 @@ class SourceSpec(BaseModel):
     parser: str
     enabled: bool = True
     timeout_seconds: float = Field(30.0, gt=0, le=120)
+    collection_budget_seconds: float | None = Field(None, gt=0, le=3600)
 
     @field_validator("url")
     @classmethod

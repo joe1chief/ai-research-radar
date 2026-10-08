@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 import math
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
@@ -18,6 +19,7 @@ from sqlalchemy.orm import Session
 
 from .collectors import UnsupportedCollectorError, collector_for
 from .collectors.base import CollectorHTTPError, DomainRequestThrottle
+from .limits import Deadline, CollectionBudgetExceeded
 from .config import load_issuers
 from .contracts import EventStatus, RadarEvent, SourceSpec, Topic, VerificationStatus
 from .db import (
@@ -73,6 +75,7 @@ class CollectionStats:
     skipped: int = 0
     failed: int = 0
     degraded: int = 0
+    budget_exhausted: int = 0
 
     def to_dict(self) -> dict[str, int]:
         return asdict(self)
@@ -92,6 +95,10 @@ def collect_group(
     raw_store: RawSnapshotStore | None = None,
     cursor_transform: Callable[[SourceSpec, dict[str, Any]], dict[str, Any]] | None = None,
     archive_only_cutoff: datetime | None = None,
+    source_budget_seconds: float = 120,
+    group_budget_seconds: float = 600,
+    recovery_budget_seconds: float = 10,
+    clock: Callable[[], float] = time.monotonic,
 ) -> CollectionStats:
     """Collect one source group while keeping network waits outside DB transactions.
 
@@ -102,9 +109,11 @@ def collect_group(
 
     stats = CollectionStats()
     sec_throttle = DomainRequestThrottle(SEC_MIN_REQUEST_INTERVAL_SECONDS)
-    for spec in sources:
-        if spec.group != group:
-            continue
+    group_deadline = Deadline(group_budget_seconds, clock=clock)
+
+    def collect_source(spec: SourceSpec, deadline: Deadline) -> None:
+        deadline.remaining("source_setup")
+        LOGGER.info("source stage: source_id=%s stage=setup", spec.id)
         source_row = sync_source(session, spec)
         if not spec.enabled:
             # Disabled sources still need their version-controlled state
@@ -119,16 +128,21 @@ def collect_group(
             health.updated_at = utcnow()
             source_row.next_due_at = None
             session.commit()
-            continue
-        stats.sources += 1
+            return
         now = utcnow()
         due = source_row.next_due_at
         if due is not None and due.tzinfo is None:
             due = due.replace(tzinfo=UTC)
-        if not force and due is not None and due > now:
+        retry_at = (ensure_source_health(session, spec.id).metadata_json or {}).get(
+            "retry_not_before"
+        )
+        retry_due = datetime.fromisoformat(retry_at) if retry_at else None
+        if (retry_due is not None and retry_due > now) or (
+            not force and due is not None and due > now
+        ):
             stats.skipped += 1
             session.commit()
-            continue
+            return
         cursor_row = ensure_cursor(session, spec.id)
         health = ensure_source_health(session, spec.id)
         health.last_attempt_at = utcnow()
@@ -139,35 +153,32 @@ def collect_group(
         session.commit()
         if cursor_transform is not None:
             cursor_payload = cursor_transform(spec, dict(cursor_payload))
-        try:
-            collector_user_agent = user_agent
-            if spec.kind == "sec_submissions":
-                collector_user_agent = sec_user_agent or user_agent
-            collector_kwargs: dict[str, Any] = {
-                "client": shared_client,
-                "user_agent": collector_user_agent,
-                "authorization": _source_authorization(
-                    spec.kind,
-                    github_token=github_token,
-                    openreview_access_token=openreview_access_token,
-                ),
-            }
-            if spec.kind == "sec_submissions":
-                collector_kwargs["request_throttle"] = sec_throttle.wait
-            collector = collector_for(spec, **collector_kwargs)
-        except UnsupportedCollectorError as exc:
-            stats.skipped += 1
-            health = ensure_source_health(session, spec.id)
-            health.status = "degraded"
-            health.last_error = str(exc)
-            health.updated_at = utcnow()
-            session.commit()
-            continue
+        collector_user_agent = user_agent
+        if spec.kind == "sec_submissions":
+            collector_user_agent = sec_user_agent or user_agent
+        collector_kwargs: dict[str, Any] = {
+            "client": shared_client,
+            "deadline": deadline,
+            "user_agent": collector_user_agent,
+            "authorization": _source_authorization(
+                spec.kind,
+                github_token=github_token,
+                openreview_access_token=openreview_access_token,
+            ),
+        }
+        if spec.kind == "sec_submissions":
+            collector_kwargs["request_throttle"] = sec_throttle.wait
+        collector = collector_for(spec, **collector_kwargs)
         try:
             # A single HTML/API source can spend minutes doing retries and
             # detail requests, so collection deliberately runs without an
             # active database transaction.
+            LOGGER.info("source stage: source_id=%s stage=fetch", spec.id)
             batch = collector.collect(cursor_payload)
+            deadline.remaining("after_collection")
+            LOGGER.info(
+                "source stage: source_id=%s stage=persist items=%s", spec.id, len(batch.items)
+            )
             source_discovered = 0
             source_changed = 0
             source_unchanged = 0
@@ -180,6 +191,14 @@ def collect_group(
                 cursor_row = ensure_cursor(session, spec.id)
                 health = ensure_source_health(session, spec.id)
                 for item in batch.items:
+                    deadline.remaining("ingest_item")
+                    if source_discovered % 100 == 0:
+                        LOGGER.info(
+                            "source progress: source_id=%s stage=ingest completed=%s total=%s",
+                            spec.id,
+                            source_discovered,
+                            len(batch.items),
+                        )
                     row, changed = ingest_item(session, spec, item)
                     source_discovered += 1
                     item_metadata = dict(row.metadata_json or {})
@@ -199,6 +218,7 @@ def collect_group(
                         source_changed += 1
                         if raw_store is not None and item.raw_snapshot:
                             try:
+                                LOGGER.info("source stage: source_id=%s stage=raw_upload", spec.id)
                                 version = current_item_version(session, row)
                                 version.raw_storage_path = raw_store.put(
                                     source_id=spec.id,
@@ -206,10 +226,13 @@ def collect_group(
                                     content_hash=version.content_hash,
                                     payload=item.raw_snapshot,
                                     fetched_at=version.fetched_at,
+                                    deadline=deadline,
                                 )
+                            except CollectionBudgetExceeded:
+                                raise
                             except Exception as exc:
                                 batch.warnings.append(
-                                    f"private raw snapshot upload failed for {row.id}: {exc}"
+                                    f"private raw snapshot upload failed for {row.id}: error_type={type(exc).__name__}"
                                 )
                     else:
                         source_unchanged += 1
@@ -223,6 +246,9 @@ def collect_group(
                     health_metadata["empty_streak"] = 0
                 health_metadata["last_item_count"] = len(batch.items)
                 health.metadata_json = health_metadata
+                deadline.remaining("cursor_update")
+                health_metadata.pop("retry_not_before", None)
+                health.metadata_json = health_metadata
                 _apply_cursor(cursor_row, batch.cursor)
                 health.status = "healthy" if not batch.warnings else "degraded"
                 health.last_success_at = utcnow()
@@ -231,44 +257,113 @@ def collect_group(
                 health.last_error = "; ".join(batch.warnings)[:2000] or None
                 source_row.next_due_at = utcnow() + _cadence_delta(spec.cadence)
                 health.updated_at = utcnow()
+            deadline.remaining("source_commit")
+            LOGGER.info("source stage: source_id=%s stage=commit", spec.id)
             session.commit()
             stats.discovered += source_discovered
             stats.changed += source_changed
             stats.unchanged += source_unchanged
             stats.not_modified += int(batch.not_modified)
             stats.degraded += int(bool(batch.warnings))
+        finally:
+            try:
+                collector.close()
+            except Exception as close_error:
+                # Cleanup cannot undo a committed batch or its cursor.
+                LOGGER.warning(
+                    "collector cleanup failed: source_id=%s error_type=%s",
+                    spec.id,
+                    type(close_error).__name__,
+                )
+
+    LOGGER.info("collection group start: group=%s budget_seconds=%.3f", group, group_budget_seconds)
+    for spec in sources:
+        if spec.group != group:
+            continue
+        try:
+            remaining = group_deadline.remaining("group")
+        except CollectionBudgetExceeded:
+            stats.budget_exhausted = 1
+            LOGGER.warning("collection group budget exhausted: group=%s", group)
+            break
+        budget = min(float(spec.collection_budget_seconds or source_budget_seconds), remaining)
+        deadline = Deadline(budget, clock=clock)
+        started = clock()
+        stats.sources += int(spec.enabled)
+        LOGGER.info(
+            "source start: source_id=%s group=%s budget_seconds=%.3f", spec.id, group, budget
+        )
+        try:
+            with deadline.activate():
+                collect_source(spec, deadline)
+        except UnsupportedCollectorError as exc:
+            session.rollback()
+            stats.skipped += 1
+            health = ensure_source_health(session, spec.id)
+            health.status = "degraded"
+            health.last_error = str(exc)
+            health.updated_at = utcnow()
+            session.commit()
         except Exception as exc:
-            # A DBAPI disconnect invalidates the entire outer transaction even
-            # when the work used a savepoint. Roll it back fully before trying
-            # to persist source health on a replacement connection.
+            # Leave the expired deadline before recovery, then fully roll back:
+            # savepoints alone cannot recover a DBAPI-invalidated transaction.
             session.rollback()
             http_error = exc if isinstance(exc, CollectorHTTPError) else None
             LOGGER.warning(
                 "source collection failed: source_id=%s error_type=%s "
-                "connection_invalidated=%s status_code=%s retryable=%s host=%s",
+                "connection_invalidated=%s status_code=%s retryable=%s host=%s sqlstate=%s",
                 spec.id,
                 type(exc).__name__,
                 bool(getattr(exc, "connection_invalidated", False)),
-                http_error.status_code if http_error is not None else None,
-                http_error.retryable if http_error is not None else False,
-                http_error.host if http_error is not None else None,
+                http_error.status_code if http_error else None,
+                http_error.retryable if http_error else False,
+                http_error.host if http_error else None,
+                getattr(getattr(exc, "orig", None), "sqlstate", None),
             )
             stats.failed += 1
-            source_row = session.get(SourceModel, spec.id)
-            if source_row is None:
-                source_row = sync_source(session, spec)
-            health = ensure_source_health(session, spec.id)
-            health.status = "failing"
-            health.consecutive_failures += 1
-            health.last_http_status = (
-                http_error.status_code if http_error is not None else None
-            )
-            health.last_error = str(exc)[:2000]
-            source_row.next_due_at = utcnow() + timedelta(minutes=30)
-            health.updated_at = utcnow()
-            session.commit()
+            try:
+                recovery_deadline = Deadline(recovery_budget_seconds, clock=clock)
+                with recovery_deadline.activate():
+                    source_row = session.get(SourceModel, spec.id) or sync_source(session, spec)
+                    health = ensure_source_health(session, spec.id)
+                    health.status = "failing"
+                    health.consecutive_failures += 1
+                    health.last_http_status = http_error.status_code if http_error else None
+                    # Do not persist raw DBAPI exceptions (SQL, URLs or bound values).
+                    health.last_error = (
+                        str(exc)[:2000]
+                        if isinstance(exc, (CollectorHTTPError, CollectionBudgetExceeded))
+                        else f"source failed: error_type={type(exc).__name__}"
+                    )
+                    retry_delay = getattr(exc, "retry_after_seconds", None)
+                    retry_at = utcnow() + timedelta(minutes=30)
+                    if retry_delay is not None:
+                        max_delay = (datetime.max.replace(tzinfo=UTC) - utcnow()).total_seconds()
+                        server_retry_at = utcnow() + timedelta(
+                            seconds=min(retry_delay, max_delay - 1)
+                        )
+                        retry_at = max(retry_at, server_retry_at)
+                        health.metadata_json = {
+                            **(health.metadata_json or {}),
+                            "retry_not_before": server_retry_at.isoformat(),
+                        }
+                    source_row.next_due_at = retry_at
+                    health.updated_at = utcnow()
+                    LOGGER.info("source stage: source_id=%s stage=failure_commit", spec.id)
+                    recovery_deadline.remaining("failure_commit")
+                    session.commit()
+            except Exception as recovery_error:
+                session.rollback()
+                LOGGER.error(
+                    "source health recovery failed: source_id=%s error_type=%s",
+                    spec.id,
+                    type(recovery_error).__name__,
+                )
         finally:
-            collector.close()
+            LOGGER.info("source end: source_id=%s elapsed_seconds=%.3f", spec.id, clock() - started)
+    if clock() >= group_deadline.ends_at:
+        stats.budget_exhausted = 1
+    LOGGER.info("collection group end: group=%s stats=%s", group, stats.to_dict())
     return stats
 
 

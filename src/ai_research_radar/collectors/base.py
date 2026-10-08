@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import random
+import logging
 import threading
 import time
 from abc import ABC, abstractmethod
@@ -13,6 +14,15 @@ from urllib.parse import urljoin, urlsplit
 import httpx
 
 from ..contracts import CollectionBatch, SourceSpec
+from ..limits import (
+    ACTIVE_DEADLINE,
+    Deadline,
+    CollectionBudgetExceeded,
+    retry_after_seconds,
+    read_response,
+)
+
+LOGGER = logging.getLogger(__name__)
 
 
 class UnsupportedCollectorError(RuntimeError):
@@ -34,11 +44,13 @@ class CollectorHTTPError(RuntimeError):
         status_code: int | None = None,
         retryable: bool = False,
         host: str | None = None,
+        retry_after_seconds: float | None = None,
     ) -> None:
         super().__init__(message)
         self.status_code = status_code
         self.retryable = retryable
         self.host = host
+        self.retry_after_seconds = retry_after_seconds
 
 
 class DomainRequestThrottle:
@@ -70,7 +82,11 @@ class DomainRequestThrottle:
             self._next_allowed[domain] = ready_at + self.min_interval_seconds
         delay = ready_at - now
         if delay > 0:
-            self.sleep(delay)
+            deadline = ACTIVE_DEADLINE.get()
+            if deadline is None:
+                self.sleep(delay)
+            else:
+                deadline.sleep(delay, sleep=self.sleep, stage="domain_throttle")
 
 
 class BaseCollector(ABC):
@@ -84,6 +100,7 @@ class BaseCollector(ABC):
         sleep: Callable[[float], None] = time.sleep,
         max_attempts: int = 3,
         request_throttle: Callable[[str], None] | None = None,
+        deadline: Deadline | None = None,
     ) -> None:
         self.spec = spec
         self._owns_client = client is None
@@ -98,10 +115,15 @@ class BaseCollector(ABC):
             follow_redirects=True,
             headers=self._default_headers,
         )
-        self.sleep = sleep
+        self.deadline = deadline or ACTIVE_DEADLINE.get() or Deadline(120)
+        self._sleep = sleep
+        self.sleep = lambda seconds: self.deadline.sleep(
+            seconds, sleep=sleep, stage="page_interval"
+        )
         self.max_attempts = max_attempts
         self.request_throttle = request_throttle
         self.last_http_status: int | None = None
+        self.request_count = 0
 
     def close(self) -> None:
         if self._owns_client:
@@ -141,8 +163,17 @@ class BaseCollector(ABC):
         method = method.upper()
         if method not in {"GET", "POST"}:
             raise ValueError(f"unsupported collector HTTP method: {method}")
+        self.request_count += 1
 
         for attempt in range(1, self.max_attempts + 1):
+            self.deadline.remaining("http_attempt")
+            LOGGER.info(
+                "collector request: source_id=%s host=%s request=%s attempt=%s",
+                self.spec.id,
+                _safe_host(url or self.spec.url),
+                self.request_count,
+                attempt,
+            )
             transport_failure: tuple[str, str | None] | None = None
             try:
                 response = self._request_with_safe_redirects(
@@ -155,9 +186,6 @@ class BaseCollector(ABC):
                 )
             except httpx.TransportError as exc:
                 self.last_http_status = None
-                if attempt < self.max_attempts:
-                    self.sleep(2 ** (attempt - 1) + random.uniform(0, 0.25))
-                    continue
                 transport_failure = (
                     type(exc).__name__,
                     _safe_host(url or self.spec.url),
@@ -168,6 +196,16 @@ class BaseCollector(ABC):
             # original request URL or transport message via cause/context.
             if transport_failure is not None:
                 error_type, host = transport_failure
+                if attempt < self.max_attempts:
+                    delay = 2 ** (attempt - 1) + random.uniform(0, 0.25)
+                    LOGGER.info(
+                        "collector transport retry: source_id=%s error_type=%s wait_seconds=%.3f",
+                        self.spec.id,
+                        error_type,
+                        delay,
+                    )
+                    self.deadline.sleep(delay, sleep=self._sleep, stage="transport_retry")
+                    continue
                 raise CollectorHTTPError(
                     _safe_failure_message(
                         self.spec.id,
@@ -181,18 +219,37 @@ class BaseCollector(ABC):
                 )
 
             self.last_http_status = response.status_code
+            LOGGER.info(
+                "collector response: source_id=%s host=%s request=%s status=%s",
+                self.spec.id,
+                response.request.url.host,
+                self.request_count,
+                response.status_code,
+            )
             if response.status_code == 304:
                 return response
             retryable = response.status_code == 429 or response.status_code >= 500
+            server_delay = (
+                retry_after_seconds(response.headers.get("Retry-After")) if retryable else None
+            )
             if retryable and attempt < self.max_attempts:
-                retry_after = response.headers.get("Retry-After")
-                delay = (
-                    float(retry_after)
-                    if retry_after and retry_after.isdigit()
-                    else 2 ** (attempt - 1)
+                delay = server_delay if server_delay is not None else 2 ** (attempt - 1)
+                LOGGER.info("collector retry wait: source_id=%s seconds=%.3f", self.spec.id, delay)
+                self.deadline.sleep(
+                    delay + random.uniform(0, 0.25),
+                    sleep=self._sleep,
+                    stage="http_retry",
+                    retry_after_seconds=server_delay,
                 )
-                self.sleep(delay + random.uniform(0, 0.25))
                 continue
+            if retryable and server_delay is not None:
+                # Inner venue/detail collectors may catch ordinary HTTP errors.
+                # Latch the deferral so their next request or the persistence
+                # boundary cannot advance this source or retry another page.
+                self.deadline.failure = CollectionBudgetExceeded(
+                    "http_retry_exhausted", retry_after_seconds=server_delay
+                )
+                raise self.deadline.failure
             if not response.is_success:
                 host = (response.request.url.host or "").lower() or None
                 status_code = response.status_code
@@ -207,6 +264,7 @@ class BaseCollector(ABC):
                     status_code=status_code,
                     retryable=retryable,
                     host=host,
+                    retry_after_seconds=server_delay,
                 )
             return response
         raise AssertionError("collector retry loop exhausted without a result")
@@ -224,21 +282,29 @@ class BaseCollector(ABC):
         original_host = (urlsplit(url).hostname or "").lower()
         last_redirect_status: int | None = None
         for redirect_count in range(6):
+            self.deadline.remaining("redirect")
             if self.request_throttle is not None:
                 self.request_throttle(url)
+            remaining = self.deadline.remaining("http_request")
             request_kwargs: dict[str, Any] = {
                 "params": params if redirect_count == 0 else None,
                 "data": data if method == "POST" else None,
                 "headers": headers,
                 "follow_redirects": False,
             }
-            if timeout is not None:
-                request_kwargs["timeout"] = timeout
-            response = self.client.request(
-                method,
-                url,
-                **request_kwargs,
+            request_kwargs["timeout"] = min(timeout or self.spec.timeout_seconds, remaining)
+            LOGGER.info(
+                "collector HTTP start: source_id=%s host=%s request=%s redirect=%s timeout=%.3f",
+                self.spec.id,
+                _safe_host(url),
+                self.request_count,
+                redirect_count,
+                request_kwargs["timeout"],
             )
+            # Stream raw chunks so a continuously trickling body cannot
+            # evade the wall-clock budget merely by avoiding read inactivity.
+            with self.client.stream(method, url, **request_kwargs) as streamed:
+                response = read_response(streamed, self.deadline, "http_body")
             if response.status_code not in {301, 302, 303, 307, 308}:
                 return response
             last_redirect_status = response.status_code

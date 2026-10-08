@@ -36,6 +36,7 @@ from pgvector.sqlalchemy import Vector
 
 from .contracts import CollectedItem, EventStatus, SourceSpec
 from .identity import content_hash, normalize_content, stable_id
+from .limits import ACTIVE_DEADLINE
 
 
 def utcnow() -> datetime:
@@ -298,7 +299,14 @@ class UsageLedgerModel(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
-def create_db_engine(database_url: str, *, echo: bool = False) -> Engine:
+def create_db_engine(
+    database_url: str,
+    *,
+    echo: bool = False,
+    connect_timeout_seconds: int = 10,
+    statement_timeout_seconds: float = 30,
+    lock_timeout_seconds: float = 5,
+) -> Engine:
     if database_url.startswith("sqlite:///"):
         raw_path = database_url.removeprefix("sqlite:///")
         if raw_path not in ("", ":memory:"):
@@ -308,6 +316,7 @@ def create_db_engine(database_url: str, *, echo: bool = False) -> Engine:
         {"check_same_thread": False}
         if is_sqlite
         else {
+            "connect_timeout": connect_timeout_seconds,
             "keepalives": 1,
             "keepalives_idle": 30,
             "keepalives_interval": 10,
@@ -330,6 +339,39 @@ def create_db_engine(database_url: str, *, echo: bool = False) -> Engine:
     engine = create_engine(database_url, **engine_kwargs)
     if database_url.startswith("sqlite"):
         event.listen(engine, "connect", _enable_sqlite_foreign_keys)
+    else:
+        # SET LOCAL is transaction-scoped and works with transaction poolers;
+        # do not depend on session settings or startup options surviving reuse.
+        def transaction_limits(connection):
+            connection.info["radar_setting_limits"] = True
+            try:
+                connection.exec_driver_sql(
+                    "SELECT set_config('statement_timeout', %s, true), "
+                    "set_config('lock_timeout', %s, true)",
+                    (
+                        f"{max(1, int(statement_timeout_seconds * 1000))}ms",
+                        f"{max(1, int(lock_timeout_seconds * 1000))}ms",
+                    ),
+                )
+            finally:
+                connection.info.pop("radar_setting_limits", None)
+
+        def statement_limits(connection, cursor, statement, parameters, context, executemany):
+            deadline = ACTIVE_DEADLINE.get()
+            if deadline is None or connection.info.get("radar_setting_limits"):
+                return
+            remaining = deadline.remaining("database_execute")
+            cursor.execute(
+                "SELECT set_config('statement_timeout', %s, true), "
+                "set_config('lock_timeout', %s, true)",
+                (
+                    f"{max(1, int(min(statement_timeout_seconds, remaining) * 1000))}ms",
+                    f"{max(1, int(min(lock_timeout_seconds, remaining) * 1000))}ms",
+                ),
+            )
+
+        event.listen(engine, "begin", transaction_limits)
+        event.listen(engine, "before_cursor_execute", statement_limits)
     return engine
 
 

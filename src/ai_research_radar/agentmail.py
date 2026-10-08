@@ -13,6 +13,7 @@ import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from .limits import Deadline, retry_after_seconds
 from .contracts import DeliveryState
 from .db import DeliveryModel, WebhookEventModel, utcnow
 
@@ -59,10 +60,19 @@ class DraftClient(Protocol):
 class AgentMailClient:
     """Thin lazy wrapper around the official AgentMail Python SDK."""
 
-    def __init__(self, *, api_key: str, inbox_id: str) -> None:
+    def __init__(
+        self,
+        *,
+        api_key: str,
+        inbox_id: str,
+        timeout_seconds: float = 20,
+        retry_budget_seconds: float = 90,
+    ) -> None:
         from agentmail import AgentMail
 
-        self.client = AgentMail(api_key=api_key)
+        self.client = AgentMail(api_key=api_key, timeout=timeout_seconds)
+        self.timeout_seconds = timeout_seconds
+        self.retry_budget_seconds = retry_budget_seconds
         self.inbox_id = inbox_id
 
     def create_draft(
@@ -87,13 +97,16 @@ class AgentMailClient:
         }
         if send_at is not None:
             kwargs["send_at"] = send_at.astimezone(UTC)
-        draft = self._retry(lambda: self.client.inboxes.drafts.create(**kwargs), idempotent=True)
+        draft = self._request(
+            lambda options: self.client.inboxes.drafts.create(**kwargs, request_options=options),
+            idempotent=True,
+        )
         return str(draft.draft_id)
 
     def send_draft(self, draft_id: str) -> str:
-        message = self._retry(
-            lambda: self.client.inboxes.drafts.send(
-                inbox_id=self.inbox_id, draft_id=draft_id
+        message = self._request(
+            lambda options: self.client.inboxes.drafts.send(
+                inbox_id=self.inbox_id, draft_id=draft_id, request_options=options
             ),
             idempotent=False,
         )
@@ -119,13 +132,16 @@ class AgentMailClient:
         }
         if send_at is not None:
             kwargs["send_at"] = send_at.astimezone(UTC)
-        draft = self._retry(lambda: self.client.inboxes.drafts.update(**kwargs), idempotent=True)
+        draft = self._request(
+            lambda options: self.client.inboxes.drafts.update(**kwargs, request_options=options),
+            idempotent=True,
+        )
         return str(draft.draft_id)
 
     def get_draft(self, draft_id: str) -> dict[str, Any]:
-        draft = self._retry(
-            lambda: self.client.inboxes.drafts.get(
-                inbox_id=self.inbox_id, draft_id=draft_id
+        draft = self._request(
+            lambda options: self.client.inboxes.drafts.get(
+                inbox_id=self.inbox_id, draft_id=draft_id, request_options=options
             ),
             idempotent=True,
         )
@@ -134,12 +150,13 @@ class AgentMailClient:
     def find_draft_by_label(
         self, label: str, *, after: datetime | None = None
     ) -> dict[str, Any] | None:
-        result = self._retry(
-            lambda: self.client.inboxes.drafts.list(
+        result = self._request(
+            lambda options: self.client.inboxes.drafts.list(
                 inbox_id=self.inbox_id,
                 labels=[label],
                 after=after,
                 limit=10,
+                request_options=options,
             ),
             idempotent=True,
         )
@@ -149,23 +166,40 @@ class AgentMailClient:
     def find_message_by_label(
         self, label: str, *, after: datetime | None = None
     ) -> dict[str, Any] | None:
-        result = self._retry(
-            lambda: self.client.inboxes.messages.list(
+        result = self._request(
+            lambda options: self.client.inboxes.messages.list(
                 inbox_id=self.inbox_id,
                 labels=[label],
                 after=after,
                 limit=10,
+                request_options=options,
             ),
             idempotent=True,
         )
         messages = getattr(result, "messages", None) or []
         return _sdk_object(messages[0]) if messages else None
 
-    @staticmethod
-    def _retry(call, *, idempotent: bool, max_attempts: int = 4):
-        """Honor Retry-After; retry ambiguous failures only for safe operations."""
+    def _request(self, call, *, idempotent: bool):
+        deadline = Deadline(self.retry_budget_seconds)
+        return self._retry(
+            lambda: call(
+                {
+                    "max_retries": 0,
+                    "timeout_in_seconds": min(
+                        self.timeout_seconds, deadline.remaining("agentmail_request")
+                    ),
+                }
+            ),
+            idempotent=idempotent,
+            deadline=deadline,
+        )
 
+    @staticmethod
+    def _retry(call, *, idempotent: bool, max_attempts: int = 4, deadline: Deadline | None = None):
+        """Only this layer retries; ambiguous sends never re-enter the SDK."""
+        deadline = deadline or Deadline(90)
         for attempt in range(1, max_attempts + 1):
+            deadline.remaining("agentmail_attempt")
             try:
                 return call()
             except Exception as exc:
@@ -181,12 +215,23 @@ class AgentMailClient:
                 if not retryable or attempt == max_attempts:
                     raise
                 headers = getattr(exc, "headers", None) or {}
-                raw_retry_after = headers.get("retry-after") or headers.get("Retry-After")
-                try:
-                    delay = float(raw_retry_after) if raw_retry_after is not None else 2 ** (attempt - 1)
-                except (TypeError, ValueError):
-                    delay = 2 ** (attempt - 1)
-                time.sleep(delay + random.uniform(0, 0.25))
+                server_delay = retry_after_seconds(
+                    headers.get("retry-after") or headers.get("Retry-After")
+                )
+                delay = (
+                    server_delay if server_delay is not None else 2 ** (attempt - 1)
+                ) + random.uniform(0, 0.25)
+                if delay >= deadline.remaining("agentmail_retry"):
+                    # Keep the original provider classification; do not shorten
+                    # Retry-After and make an early request to fit our budget.
+                    raise
+                LOGGER.info(
+                    "AgentMail retry: attempt=%s status=%s wait_seconds=%.3f",
+                    attempt,
+                    status,
+                    delay,
+                )
+                deadline.sleep(delay, sleep=time.sleep, stage="agentmail_retry")
         raise RuntimeError("unreachable")
 
 
@@ -326,7 +371,7 @@ def deliver_outbox(
 def _retryable_idempotent_error(exc: Exception) -> bool:
     status = getattr(exc, "status_code", None)
     return bool(
-        status == 429
+        status in {408, 409, 429}
         or isinstance(status, int)
         and status >= 500
         or isinstance(exc, (TimeoutError, ConnectionError, httpx.HTTPError))
