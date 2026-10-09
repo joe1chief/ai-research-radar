@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from html.parser import HTMLParser
 from typing import Any
@@ -14,6 +15,8 @@ from ..contracts import CollectedItem, CollectionBatch
 from ..identity import canonicalize_url, normalize_content, stable_id
 from .base import BaseCollector, CollectorHTTPError, _same_site
 from .parsing import parse_datetime
+
+LOGGER = logging.getLogger(__name__)
 
 
 class _LinkParser(HTMLParser):
@@ -148,12 +151,19 @@ class HtmlListingCollector(BaseCollector):
                     detail_response = self.request({}, url=item.canonical_url, timeout=6.0)
                     if "html" not in detail_response.headers.get("content-type", "text/html"):
                         continue
+                    self.deadline.remaining("html_detail_parse")
+                    LOGGER.info(
+                        "collector parse: source_id=%s stage=html_detail characters=%s",
+                        self.spec.id,
+                        len(detail_response.text),
+                    )
                     enriched[item.canonical_url] = _detail_item(
                         self.spec,
                         item,
                         detail_response.text,
                         str(detail_response.url),
                     )
+                    self.deadline.remaining("html_detail_parsed")
                 except (CollectorHTTPError, httpx.HTTPError, ValueError, json.JSONDecodeError) as exc:
                     # Canonical URLs can contain sensitive query parameters.
                     # Persist only the exception class; structured HTTP status

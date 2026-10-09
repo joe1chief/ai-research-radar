@@ -19,6 +19,53 @@ TRACKING_KEYS = {
 }
 
 
+_CSS_AT_RULE_START = re.compile(
+    r"(?<![\w@])@(?:media|supports|(?:-webkit-)?keyframes|font-face|page|layer|"
+    r"container|scope|starting-style|counter-style|property|font-feature-values|"
+    r"font-palette-values|position-try|view-transition)(?![\w-])[^{};@]*\{",
+    re.IGNORECASE,
+)
+
+
+def _strip_css_at_rules(value: str) -> str:
+    """Remove recognized CSS blocks with a forward-only brace scan.
+
+    Research metrics such as best@16/pass@k are not CSS. A nested-repeat regex
+    used to interpret those metrics followed by kernel code as an at-rule and
+    backtrack indefinitely. Quoted braces and escapes do not change block depth;
+    incomplete blocks are preserved rather than discarding the remaining text.
+    """
+    parts: list[str] = []
+    start = 0
+    while match := _CSS_AT_RULE_START.search(value, start):
+        depth = 1
+        quote = ""
+        escaped = False
+        end = match.end()
+        while end < len(value) and depth:
+            char = value[end]
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif quote:
+                if char == quote:
+                    quote = ""
+            elif char in {"'", '"'}:
+                quote = char
+            elif char == "{":
+                depth += 1
+            elif char == "}":
+                depth -= 1
+            end += 1
+        if depth:
+            break
+        parts.extend((value[start:match.start()], " "))
+        start = end
+    parts.append(value[start:])
+    return "".join(parts)
+
+
 def strip_markup_and_css(value: str) -> str:
     """Strip script/style/noscript/svg tags, CSS comments, and CSS rule blocks completely."""
     if not value:
@@ -28,13 +75,14 @@ def strip_markup_and_css(value: str) -> str:
     value = re.sub(r"(?is)<noscript\b[^>]*>.*?</noscript>", " ", value)
     value = re.sub(r"(?is)<svg\b[^>]*>.*?</svg>", " ", value)
     value = re.sub(r"(?s)/\*.*?\*/", " ", value)
-    value = re.sub(r"(?s)@[a-zA-Z0-9_-]+\s+[^{]+\{(?:[^{}]*\{[^{}]*\}[^{}]*|[^{}]*)*\}", " ", value)
-    for _ in range(2):
-        value = re.sub(
-            r"(?s)(?:[.#][a-zA-Z0-9_\-]+[a-zA-Z0-9_\-\.\#\:\s+>~,]*|[a-zA-Z0-9_\-]+\s*:[a-zA-Z0-9_\-]+)\s*\{[^{}]*\}",
-            " ",
-            value,
-        )
+    if "{" in value:
+        value = _strip_css_at_rules(value)
+        for _ in range(2):
+            value = re.sub(
+                r"(?s)(?:[.#][a-zA-Z0-9_\-]+[a-zA-Z0-9_\-\.\#\:\s+>~,]*|[a-zA-Z0-9_\-]+\s*:[a-zA-Z0-9_\-]+)\s*\{[^{}]*\}",
+                " ",
+                value,
+            )
     value = re.sub(r"<[^>]+>", " ", value)
     return value
 

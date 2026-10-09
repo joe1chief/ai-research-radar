@@ -54,6 +54,14 @@ webhook events:
 
 ## Source failures
 
+If collection stops after an HTML HTTP 200, check the following `collector parse`
+log before increasing network or workflow timeouts. In the October 2026 Cognition
+failure, research metrics such as `best@16` followed by nested CUDA code triggered
+catastrophic backtracking in the CSS cleanup regex. CSS at-rules now use a
+recognized-name match and a forward brace scan; metrics and incomplete blocks
+are retained. Regression tests run those inputs in a subprocess with a wall-clock
+timeout so a parser regression fails instead of hanging the test job.
+
 ### Collection and database budgets
 
 Radar emits flushed INFO logs for runtime setup, source fetch/persistence/commit,
