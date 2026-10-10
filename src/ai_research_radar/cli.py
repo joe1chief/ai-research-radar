@@ -629,6 +629,13 @@ def maintenance(
     include_storage: bool = typer.Option(
         False, "--include-storage", help="Read bucket listings for the preview only."
     ),
+    retention_estimate: bool = typer.Option(
+        False, "--retention-estimate", help="Aggregate 90-day historical payload candidates."
+    ),
+    retention_preview: bool = typer.Option(
+        False, "--retention-preview", help="Include bounded private version IDs; never modify."
+    ),
+    retention_limit: int = typer.Option(200, "--retention-limit", min=1, max=1000),
 ) -> None:
     """Read-only capacity, source-health and retention diagnostics."""
     from .maintenance import diagnose, readonly_session
@@ -654,9 +661,30 @@ def maintenance(
             storage_skip = "raw_storage_disabled"
         with readonly_session(factory) as session:
             payload = diagnose(
-                session, settings, preview=preview, raw_store=raw_store,
+                session,
+                settings,
+                preview=preview,
+                raw_store=raw_store,
                 storage_skip_reason=storage_skip,
             )
+            if retention_estimate or retention_preview:
+                from .retention import estimate_retention
+
+                try:
+                    with session.begin_nested():
+                        payload["history_retention"] = estimate_retention(
+                            session, preview=retention_preview, limit=retention_limit
+                        )
+                except Exception as exc:
+                    payload["history_retention"] = {
+                        "available": False,
+                        "read_only": True,
+                        "error_type": type(exc).__name__,
+                        "sqlstate": getattr(getattr(exc, "orig", None), "sqlstate", None),
+                        "candidate_count": None,
+                        "physical_reclaimable_bytes": None,
+                    }
+                    payload["failure_reasons"].append("retention_estimate_unavailable")
     finally:
         if raw_store is not None:
             raw_store.close()

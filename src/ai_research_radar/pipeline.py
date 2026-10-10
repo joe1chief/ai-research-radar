@@ -29,6 +29,7 @@ from .db import (
     ItemVersionModel,
     RadarEventModel,
     SourceModel,
+    SourceHealthModel,
     current_item_version,
     ensure_cursor,
     ensure_source_health,
@@ -79,6 +80,48 @@ class CollectionStats:
 
     def to_dict(self) -> dict[str, int]:
         return asdict(self)
+
+
+def _tech_source_order(
+    session: Session, sources: list[SourceSpec], *, force: bool
+) -> list[SourceSpec]:
+    """Oldest persisted attempt first; no new scheduler state or network I/O."""
+    states = {
+        row.id: row
+        for row in session.execute(
+            select(
+                SourceModel.id,
+                SourceModel.next_due_at,
+                SourceHealthModel.last_attempt_at,
+                SourceHealthModel.metadata_json,
+            )
+            .outerjoin(SourceHealthModel, SourceHealthModel.source_id == SourceModel.id)
+            .where(SourceModel.id.in_([spec.id for spec in sources]))
+        )
+    }
+    now = utcnow()
+
+    def aware(value):
+        return value.replace(tzinfo=UTC) if value is not None and value.tzinfo is None else value
+
+    def priority(pair):
+        index, spec = pair
+        state = states.get(spec.id)
+        due = aware(state.next_due_at) if state else None
+        retry = (state.metadata_json or {}).get("retry_not_before") if state else None
+        try:
+            retry_due = aware(datetime.fromisoformat(retry)) if retry else None
+        except (ValueError, TypeError):
+            # The existing source guard records invalid persisted cooldown state.
+            retry_due = now + timedelta(days=1)
+        paused = (retry_due is not None and retry_due > now) or (
+            not force and due is not None and due > now
+        )
+        rank = 2 if not spec.enabled else int(paused)
+        attempted = aware(state.last_attempt_at) if state else None
+        return rank, attempted or datetime.min.replace(tzinfo=UTC), index
+
+    return [spec for _, spec in sorted(enumerate(sources), key=priority)]
 
 
 def collect_group(
@@ -277,9 +320,31 @@ def collect_group(
                 )
 
     LOGGER.info("collection group start: group=%s budget_seconds=%.3f", group, group_budget_seconds)
-    for spec in sources:
-        if spec.group != group:
-            continue
+    group_sources = [spec for spec in sources if spec.group == group]
+    if group == "tech":
+        try:
+            with group_deadline.activate():
+                group_deadline.remaining("source_order")
+                group_sources = _tech_source_order(session, group_sources, force=force)
+                group_deadline.remaining("source_order")
+        except Exception as exc:
+            session.rollback()
+            stats.failed = 1
+            stats.budget_exhausted = int(
+                isinstance(exc, CollectionBudgetExceeded) or clock() >= group_deadline.ends_at
+            )
+            LOGGER.warning(
+                "collection scheduling failed: group=tech error_type=%s sqlstate=%s",
+                type(exc).__name__,
+                getattr(getattr(exc, "orig", None), "sqlstate", None),
+            )
+            LOGGER.info("collection group end: group=%s stats=%s", group, stats.to_dict())
+            return stats
+        LOGGER.info(
+            "collection scheduling: group=tech policy=oldest_attempt_first sources=%s",
+            len(group_sources),
+        )
+    for spec in group_sources:
         try:
             remaining = group_deadline.remaining("group")
         except CollectionBudgetExceeded:
