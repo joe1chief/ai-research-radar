@@ -145,6 +145,43 @@ def test_default_summary_never_lists_or_deletes_storage(runtime, monkeypatch):
     assert payload["expired_raw_objects_removed"] == 0
 
 
+@pytest.mark.parametrize("flag", ["--retention-estimate", "--retention-preview"])
+def test_history_estimate_cli_has_no_mutations_or_storage(runtime, monkeypatch, flag):
+    _, factory, engine = runtime
+    mutations = []
+
+    def record(conn, cursor, statement, parameters, context, executemany):
+        if statement.split()[0].upper() in {"INSERT", "UPDATE", "DELETE", "CREATE", "ALTER"}:
+            mutations.append(statement)
+
+    event.listen(engine, "before_cursor_execute", record)
+    monkeypatch.setattr(cli, "RawSnapshotStore", lambda **_: pytest.fail("no storage client"))
+    result = CliRunner().invoke(cli.app, ["maintenance", flag, "--retention-limit", "1"])
+    assert result.exit_code == 0, result.output
+    estimate = json.loads(result.stdout)["history_retention"]
+    assert estimate["available"] and estimate["read_only"]
+    assert ("candidates" in estimate) == (flag == "--retention-preview")
+    assert not estimate["apply_available"] and not mutations
+    with factory() as session:
+        assert session.get(ItemVersionModel, "old").content_hash == "a"
+        assert session.scalar(select(UsageLedgerModel.usage_key)) == "test"
+
+
+def test_history_estimate_cli_failure_is_unavailable_and_redacted(runtime, monkeypatch):
+    from ai_research_radar import retention
+
+    def fail(*args, **kwargs):
+        raise RuntimeError("private SQL and credentials")
+
+    monkeypatch.setattr(retention, "estimate_retention", fail)
+    result = CliRunner().invoke(cli.app, ["maintenance", "--retention-estimate"])
+    assert result.exit_code == 1
+    payload = json.loads(result.stdout)
+    assert "retention_estimate_unavailable" in payload["failure_reasons"]
+    assert payload["history_retention"]["candidate_count"] is None
+    assert "private SQL" not in result.stdout
+
+
 def test_explicit_storage_preview_only_lists_and_distinguishes_orphans(runtime, monkeypatch):
     calls = []
 

@@ -311,11 +311,15 @@ sources:
     entity_id: sierra
     group: tech
     kind: html
-    url: https://sierra.ai/news
+    url: https://sierra.ai/blog
     fetch_strategy: html_listing
     cadence: four_hour
     evidence_type: official_company
     parser: html_links
+    include_url_patterns:
+      - '^https://sierra\.ai/blog/[^/?#]+/?$'
+    exclude_url_patterns:
+      - '/blog/(corporate|engineering|product|page|tag|category)(?:/|$)'
     enabled: true
 
   - id: harvey-blog
@@ -355,11 +359,15 @@ sources:
     entity_id: runway
     group: tech
     kind: html
-    url: https://runwayml.com/news
+    url: https://runway.com/news
     fetch_strategy: html_listing
     cadence: four_hour
     evidence_type: official_company
     parser: html_links
+    include_url_patterns:
+      - '^https://runway\.com/(?:news/research|research)/[^/?#]+/?$'
+    exclude_url_patterns:
+      - '/research/publications/?$'
     enabled: true
 
   - id: suno-blog
@@ -443,22 +451,30 @@ sources:
     entity_id: hebbia
     group: tech
     kind: html
-    url: https://www.hebbia.ai/blog
+    url: https://www.hebbia.com/blog
     fetch_strategy: html_listing
     cadence: four_hour
     evidence_type: official_company
     parser: html_links
+    include_url_patterns:
+      - '^https://www\.hebbia\.com/blog/[^/?#]+/?$'
+    exclude_url_patterns:
+      - '/blog/(all|company|engineering|product|partnerships|page|category|tag)/?$'
     enabled: true
 
   - id: factory-blog
     entity_id: factory_ai
     group: tech
     kind: html
-    url: https://www.factory.ai/blog
+    url: https://factory.com/news
     fetch_strategy: html_listing
     cadence: four_hour
     evidence_type: official_company
     parser: html_links
+    include_url_patterns:
+      - '^https://factory\.com/news/[^/?#]+/?$'
+    exclude_url_patterns:
+      - '/news/(category|categories|tag|tags|page)/?$'
     enabled: true
 
   - id: langchain-blog

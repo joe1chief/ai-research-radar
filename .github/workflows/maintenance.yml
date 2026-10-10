@@ -5,6 +5,11 @@ on:
     # 02:27 Asia/Shanghai (18:27 UTC on the preceding date).
     - cron: "27 18 * * *"
   workflow_dispatch:
+    inputs:
+      retention_estimate:
+        description: "Read-only aggregate historical payload estimate; no IDs or cleanup"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -59,4 +64,10 @@ jobs:
           RADAR_DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
-        run: uv run radar maintenance
+          RADAR_MAINTENANCE_RETENTION_ESTIMATE: ${{ inputs.retention_estimate && 'true' || 'false' }}
+        run: |
+          if [[ "$RADAR_MAINTENANCE_RETENTION_ESTIMATE" == "true" ]]; then
+            uv run radar maintenance --retention-estimate
+          else
+            uv run radar maintenance
+          fi

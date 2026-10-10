@@ -1,0 +1,78 @@
+{
+  "runway-blog": {
+    "entry_url": "https://runway.com/news",
+    "captured_date": "2026-10-10",
+    "observed_http_status": 200,
+    "articles": [
+      {
+        "url": "https://runway.com/research/introducing-runway-gen-4.5",
+        "title": "Gen-4.5"
+      },
+      {
+        "url": "https://runway.com/research/introducing-act-one",
+        "title": "Act-Two"
+      },
+      {
+        "url": "https://runway.com/news/research/introducing-solaris",
+        "title": "Solaris"
+      }
+    ]
+  },
+  "hebbia-blog": {
+    "entry_url": "https://www.hebbia.com/blog",
+    "captured_date": "2026-10-10",
+    "observed_http_status": 200,
+    "articles": [
+      {
+        "url": "https://www.hebbia.com/blog/whats-new-october-disclosure-2026",
+        "title": "What's New: October Disclosure 2026"
+      },
+      {
+        "url": "https://www.hebbia.com/blog/introducing-headless-hebbia",
+        "title": "Introducing Headless Hebbia"
+      },
+      {
+        "url": "https://www.hebbia.com/blog/you-cant-short-the-singularity",
+        "title": "You Can’t Short the Singularity"
+      }
+    ]
+  },
+  "sierra-news": {
+    "entry_url": "https://sierra.ai/blog",
+    "captured_date": "2026-10-10",
+    "observed_http_status": 200,
+    "articles": [
+      {
+        "url": "https://sierra.ai/blog/summit-recap-2026",
+        "title": "Sierra Summit 2026 Recap"
+      },
+      {
+        "url": "https://sierra.ai/blog/ghostwriter-ai-tool-to-teammate",
+        "title": "September 28, 2026 Ghostwriter: When AI goes from tool to teammate Ghostwriter n"
+      },
+      {
+        "url": "https://sierra.ai/blog/introducing-voice-personas",
+        "title": "August 7, 2026 Introducing Voice Personas What an agent does and how it expresse"
+      }
+    ]
+  },
+  "factory-blog": {
+    "entry_url": "https://factory.com/news",
+    "captured_date": "2026-10-10",
+    "observed_http_status": 200,
+    "articles": [
+      {
+        "url": "https://factory.com/news/5-billion-valuation",
+        "title": "Learn more Arrow Right Icon"
+      },
+      {
+        "url": "https://factory.com/news/mentlio",
+        "title": "Learn more Arrow Right Icon"
+      },
+      {
+        "url": "https://factory.com/news/connor-maloney-head-of-federal",
+        "title": "Learn more Arrow Right Icon"
+      }
+    ]
+  }
+}
