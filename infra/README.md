@@ -156,6 +156,11 @@ Start in shadow mode. Inspect generated Drafts and the public archive for three
 days, then change `DELIVERY_MODE=live` and `RADAR_DRY_RUN=false`. Historical
 backfills must remain shadow-only so they never emit old alerts.
 
+Maintenance is read-only: it reports all existing health alerts and exits
+non-zero without removing raw objects, clearing paths or pruning ledger rows.
+The raw upload switch does not authorize cleanup. Use the private preview and
+separate deletion approval process in [the runbook](../docs/runbook.md#capacity-and-read-only-maintenance).
+
 ## 5. Validation and operations
 
 Run the dependency-free infrastructure checks before pushing:

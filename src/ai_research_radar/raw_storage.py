@@ -137,12 +137,12 @@ class RawSnapshotStore:
                 raise ValueError("Supabase Storage list response must be a list")
             entries.extend(value for value in page if isinstance(value, dict) and value.get("name"))
             if len(page) < 1000:
-                break
-        return entries
+                return entries
+        raise RuntimeError("Storage listing page limit reached; inventory is incomplete")
 
     def _walk_objects(self, prefix: str, depth: int = 0) -> list[str]:
         if depth > 8:
-            return []
+            raise RuntimeError("Storage listing depth limit reached; inventory is incomplete")
         paths: list[str] = []
         for entry in self._list_prefix(prefix):
             path = f"{prefix}/{entry['name']}"

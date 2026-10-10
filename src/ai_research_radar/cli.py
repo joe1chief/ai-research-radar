@@ -12,7 +12,7 @@ from typing import Any
 
 import typer
 from pydantic import ValidationError
-from sqlalchemy import delete, func, select, text
+from sqlalchemy import select
 from zoneinfo import ZoneInfo
 
 from .alphaxiv import MCPAlphaXivAdapter, enrich_alphaxiv_top
@@ -21,11 +21,8 @@ from .compose import compose_delivery, ensure_operations_delivery
 from .config import load_issuers, load_sources
 from .contracts import SourceSpec
 from .db import (
-    ItemModel,
-    ItemVersionModel,
     RadarEventModel,
     SourceHealthModel,
-    UsageLedgerModel,
     create_db_engine,
     init_schema,
     session_factory,
@@ -605,70 +602,67 @@ def export_web(output: Path | None = typer.Option(None, "--output")) -> None:
         _print({"output": str(target), "events": len(dataset["events"])})
 
 
-@app.command()
-def maintenance() -> None:
-    """Reconcile health, retention markers, quota history and capacity thresholds."""
+def _maintenance_runtime() -> tuple[Settings, object]:
+    """Connect to an existing schema without issuer sync or schema creation."""
+    settings = get_settings()
+    if settings.database_url.startswith("sqlite:///"):
+        path = settings.database_url.removeprefix("sqlite:///")
+        if path == ":memory:" or not Path(path).expanduser().is_file():
+            raise typer.BadParameter("Maintenance requires an existing SQLite database")
+    engine = create_db_engine(
+        settings.database_url,
+        connect_timeout_seconds=settings.db_connect_timeout_seconds,
+        statement_timeout_seconds=settings.db_statement_timeout_seconds,
+        lock_timeout_seconds=settings.db_lock_timeout_seconds,
+    )
+    if settings.app_env == "production" and engine.dialect.name != "postgresql":
+        engine.dispose()
+        raise RuntimeError("APP_ENV=production requires a PostgreSQL/Supabase database")
+    return settings, session_factory(engine)
 
-    settings, factory = _runtime()
-    raw_store = _raw_store(settings)
+
+@app.command()
+def maintenance(
+    preview: bool = typer.Option(
+        False, "--preview", help="Include private cleanup candidate paths; never delete."
+    ),
+    include_storage: bool = typer.Option(
+        False, "--include-storage", help="Read bucket listings for the preview only."
+    ),
+) -> None:
+    """Read-only capacity, source-health and retention diagnostics."""
+    from .maintenance import diagnose, readonly_session
+
+    if include_storage and not preview:
+        raise typer.BadParameter("--include-storage requires --preview")
+    settings, factory = _maintenance_runtime()
+    raw_store = None
+    storage_skip = "not_requested"
     try:
-        with session_scope(factory) as session:
-            cutoff = datetime.now(UTC) - timedelta(days=14)
-            expired_raw = session.scalars(
-                select(ItemVersionModel).where(
-                    ItemVersionModel.raw_storage_path.is_not(None),
-                    ItemVersionModel.fetched_at < cutoff,
-                )
-            ).all()
-            expired_paths = [
-                version.raw_storage_path
-                for version in expired_raw
-                if version.raw_storage_path
-            ]
-            removed_raw = 0
-            if raw_store is not None:
-                storage_expired = raw_store.list_older_than(cutoff.date())
-                delete_paths = sorted(set([*expired_paths, *storage_expired]))
-                raw_store.delete(delete_paths)
-                for version in expired_raw:
-                    version.raw_storage_path = None
-                removed_raw = len(delete_paths)
-            session.execute(
-                delete(UsageLedgerModel).where(
-                    UsageLedgerModel.usage_date < (date.today() - timedelta(days=60))
-                )
-            )
-            health = session.scalars(select(SourceHealthModel)).all()
-            engine = session.get_bind()
-            if engine.dialect.name == "sqlite":
-                path = settings.database_url.removeprefix("sqlite:///")
-                database_bytes = Path(path).stat().st_size if path and Path(path).exists() else 0
+        if include_storage:
+            if not settings.supabase_url or not settings.supabase_secret_key:
+                storage_skip = "missing_storage_credentials"
             else:
-                database_bytes = int(
-                    session.scalar(text("select pg_database_size(current_database())")) or 0
+                # Listing is an explicit read-only request, independent of the upload switch.
+                raw_store = RawSnapshotStore(
+                    supabase_url=settings.supabase_url,
+                    secret_key=settings.supabase_secret_key,
+                    bucket=settings.raw_storage_bucket,
                 )
-            capacity_warning = database_bytes >= 350 * 1024 * 1024
-            payload = {
-                "items": session.scalar(select(func.count()).select_from(ItemModel)),
-                "versions": session.scalar(select(func.count()).select_from(ItemVersionModel)),
-                "events": session.scalar(select(func.count()).select_from(RadarEventModel)),
-                "expired_raw_objects_removed": removed_raw,
-                "expired_raw_objects_pending": 0 if raw_store else len(expired_raw),
-                "sources_failing": [
-                    row.source_id for row in health if row.consecutive_failures >= 3
-                ],
-                "database_bytes": database_bytes,
-                "capacity_warning_350mb": capacity_warning,
-            }
+                storage_skip = None
+        elif not settings.raw_storage_enabled:
+            storage_skip = "raw_storage_disabled"
+        with readonly_session(factory) as session:
+            payload = diagnose(
+                session, settings, preview=preview, raw_store=raw_store,
+                storage_skip_reason=storage_skip,
+            )
     finally:
         if raw_store is not None:
             raw_store.close()
+        factory.kw["bind"].dispose()
     _print(payload)
-    if (
-        payload["capacity_warning_350mb"]
-        or payload["sources_failing"]
-        or (settings.app_env == "production" and payload["expired_raw_objects_pending"])
-    ):
+    if payload["failure_reasons"]:
         raise typer.Exit(code=1)
 
 

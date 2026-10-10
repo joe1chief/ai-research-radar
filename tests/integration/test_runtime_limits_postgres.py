@@ -130,3 +130,45 @@ def test_real_timeout_preserves_cursor_and_collection_continues(pg_engine, monke
             assert session.get(SourceHealthModel, bad.id).status == "failing"
             assert session.get(SourceHealthModel, good.id).status == "healthy"
             assert session.get(SourceCursorModel, good.id).cursor == {"position": "new"}
+
+
+def test_maintenance_readonly_transaction_rejects_writes_and_recovers(pg_engine):
+    from ai_research_radar.maintenance import readonly_session
+    from ai_research_radar.db import session_factory
+
+    table = f"maintenance_probe_{uuid.uuid4().hex}"
+    with pg_engine.begin() as connection:
+        connection.execute(text(f"CREATE TABLE {table} (id integer)"))
+    try:
+        with pytest.raises(DBAPIError) as error:
+            with readonly_session(session_factory(pg_engine)) as session:
+                assert session.scalar(text("SHOW transaction_read_only")) == "on"
+                session.execute(text(f"INSERT INTO {table} VALUES (1)"))
+        assert error.value.orig.sqlstate == "25006"
+        with pg_engine.begin() as connection:
+            assert connection.scalar(text(f"SELECT count(*) FROM {table}")) == 0
+            connection.execute(text(f"INSERT INTO {table} VALUES (2)"))
+    finally:
+        with pg_engine.begin() as connection:
+            connection.execute(text(f"DROP TABLE {table}"))
+
+
+def test_maintenance_relation_sizes_are_readonly(pg_engine):
+    from ai_research_radar.maintenance import readonly_session, relation_sizes
+    from ai_research_radar.db import session_factory
+
+    table = f"maintenance_sizes_{uuid.uuid4().hex}"
+    with pg_engine.begin() as connection:
+        connection.execute(text(f"CREATE TABLE {table} (id integer PRIMARY KEY)"))
+        connection.execute(text(f"INSERT INTO {table} VALUES (1)"))
+    try:
+        with readonly_session(session_factory(pg_engine)) as session:
+            relations, error = relation_sizes(session)
+            assert error is None
+            entry = next(r for r in relations if r["relation"] == table)
+            assert entry["total_bytes"] == entry["table_bytes"] + entry["index_bytes"]
+            assert entry["index_bytes"] > 0
+            assert session.scalar(text(f"SELECT count(*) FROM {table}")) == 1
+    finally:
+        with pg_engine.begin() as connection:
+            connection.execute(text(f"DROP TABLE {table}"))
