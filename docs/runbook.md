@@ -125,13 +125,67 @@ Review sources monthly. GitHub may disable scheduled workflows in an inactive
 public repository; repository notifications and the documented,
 default-branch-only `workflow_dispatch` path are the recovery controls.
 
-## Capacity
+## Capacity and read-only maintenance
 
-- Warn when Postgres reaches 350 MB.
-- `radar maintenance` exits non-zero at the 350 MB threshold or when a source
-  has failed three consecutive times; these are visible workflow failures.
-- Keep raw HTML for at most 14 days and do not store PDFs. If Storage deletion
-  fails, maintenance leaves the database pointer intact and fails the job so it
-  can be retried safely.
-- Embed only new or materially updated, topic-relevant records.
-- Export monthly public JSON shards and a 30-day search index.
+`radar maintenance` is now diagnostic only, regardless of `RADAR_DRY_RUN` or
+`RADAR_RAW_STORAGE_ENABLED`. It does not sync issuers, create schema, delete
+Storage objects, clear raw paths, prune the usage ledger, or commit changes.
+PostgreSQL uses a read-only transaction; SQLite enforces `query_only`.
+The existing schedule, concurrency group and health alerts are unchanged.
+
+- The capacity alert is **350 MiB (367,001,600 bytes)**, an application warning,
+  not a verified hosted database hard limit. `capacity_hard_limit_bytes` is null.
+- `failure_reasons` enumerates every active alert: capacity, sources with at
+  least three consecutive failures, and production expired raw references.
+  Exit code 1 still signals these conditions even during a preview.
+- `source_failure_details` includes counts, status, last attempt/success, HTTP
+  status, latency, enabled/group and next due time. Raw legacy error messages,
+  arbitrary metadata and URLs are never printed. A source may retain old
+  failures when a group budget prevents visiting it; compare attempt timestamps
+  with collection logs before calling it a fresh failure.
+- `database_relations` lists up to 20 largest user relations, table/TOAST and
+  index bytes, estimated live/dead tuples and autovacuum/analyze timestamps.
+  Relation sizes and tuple estimates do not establish reclaimable disk space.
+  Restricted/failed catalog reads yield a safe `relation_diagnostics_error`.
+- `expired_raw_objects_pending` is a compatibility field counting expired
+  **database path references**, not verified objects. Use the explicit reference,
+  unique path and storage object fields instead. Skipping enumeration is explicit
+  (`raw_storage_disabled`, `not_requested`, or `missing_storage_credentials`).
+
+### Private cleanup preview
+
+Against an existing database with locally supplied credentials:
+
+```bash
+radar maintenance --preview > /private/local/path/maintenance-preview.json
+# Optional explicit Storage listing; this is read-only even when uploads are disabled:
+radar maintenance --preview --include-storage > /private/local/path/storage-preview.json
+```
+
+Do not run or publish this detailed preview in a public Actions log: it contains
+private object paths and version IDs. `--include-storage` uses the Storage list
+API (POST with read-only semantics), never DELETE/PUT/upload. The list must finish
+within its page/depth bounds; incomplete or failed listings are reported as
+unavailable and fail the preview, with counts remaining unknown. Missing
+credentials also fail an explicitly requested Storage preview.
+
+Preview includes the UTC raw cutoff, exact version/path mappings, dated bucket
+objects, objects unreferenced by any version, candidate paths and paths protected
+by a recent version reference. DB-only candidates are unverified; confirmed
+candidates require successful bucket enumeration. Even confirmed candidates are
+not authorization to delete. Date-prefix orphan discovery is limited to the
+existing YYYY/MM/DD raw layout, not a complete bucket inventory. The preview
+can become stale while collection is active.
+
+No apply/delete option is exposed. Before any future deletion, obtain separate
+user approval for an exact, fresh manifest, its bucket, cutoff, affected rows,
+protected references, expected object-byte impact and verified restore copies
+(including version-to-path mapping). The current candidate manifest does not
+estimate object bytes and is insufficient on its own to approve deletion.
+Revalidate the approved manifest against current state before applying it. Raw
+bucket deletion does **not** guarantee a smaller PostgreSQL database; database
+retention, VACUUM FULL and purchasing capacity need separate decisions. The
+old automatic 60-day ledger pruning is also replaced by a count-only diagnostic.
+
+For evidence and unresolved decisions from the October investigation, see
+[Maintenance diagnostics](maintenance-diagnostics.md).

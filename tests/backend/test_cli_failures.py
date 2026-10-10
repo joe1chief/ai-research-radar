@@ -90,7 +90,7 @@ def test_maintenance_exits_nonzero_for_three_consecutive_source_failures(
                 metadata_json={},
             )
         )
-    monkeypatch.setattr(cli, "_runtime", lambda: (settings, factory))
+    monkeypatch.setattr(cli, "_maintenance_runtime", lambda: (settings, factory))
     result = CliRunner().invoke(cli.app, ["maintenance"])
     assert result.exit_code == 1
     assert "broken-source" in result.stdout
